@@ -118,6 +118,7 @@ async function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_time_blocks_date ON time_blocks(date);
 
     ALTER TABLE appointments ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL;
+    ALTER TABLE appointments ADD COLUMN IF NOT EXISTS updated_at TEXT;
     ALTER TABLE hours ADD COLUMN IF NOT EXISTS break_start TEXT;
     ALTER TABLE hours ADD COLUMN IF NOT EXISTS break_end TEXT;
     ALTER TABLE services ADD COLUMN IF NOT EXISTS description TEXT;

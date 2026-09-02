@@ -340,7 +340,7 @@
     try {
       await refreshStatRow();
       if (which === "inicio") await renderTodayView();
-      if (which === "agenda") await renderUpcomingView();
+      if (which === "agenda") await renderCalendarView();
       if (which === "clientes") renderClientesPlaceholder();
       if (which === "servicios") await renderServicesAdmin();
       if (which === "horarios") await renderHoursAdmin();
@@ -498,32 +498,198 @@
     });
   }
 
-  async function renderTodayView() {
-    const today = isoDate(new Date());
-    const rows = await api(`/api/admin/appointments?from=${today}&to=${today}`);
-    const view = $('[data-subview="inicio"]');
-    view.innerHTML = rows.length
-      ? rows.map(appointmentRow).join("")
-      : `<p class="empty-day">No hay citas agendadas para hoy.</p>`;
-    bindAppointmentRows(view, renderTodayView);
+  function timeAgo(iso) {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return "hace un momento";
+    if (min < 60) return `hace ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `hace ${h} h`;
+    const d = Math.floor(h / 24);
+    if (d === 1) return "ayer";
+    return `hace ${d} dias`;
   }
 
-  async function renderUpcomingView() {
-    const today = new Date();
-    const to = new Date(today); to.setDate(to.getDate() + 13);
-    const rows = (await api(`/api/admin/appointments?from=${isoDate(today)}&to=${isoDate(to)}`))
-      .filter((r) => r.status === "confirmed" || r.status === "pending");
-    const view = $('[data-subview="agenda"]');
-    if (!rows.length) { view.innerHTML = `<p class="empty-day">No hay citas pendientes ni confirmadas en los proximos 14 dias.</p>`; return; }
-    const byDate = {};
-    rows.forEach((r) => { (byDate[r.date] = byDate[r.date] || []).push(r); });
-    view.innerHTML = Object.keys(byDate).sort().map((date) => `
-      <div class="day-group">
-        <h3>${niceDate(date)}</h3>
-        ${byDate[date].map(appointmentRow).join("")}
+  function activityLabel(item) {
+    const name = escapeHtml(item.clientName);
+    switch (item.type) {
+      case "booked": return `${name} reservo ${escapeHtml(item.serviceName)}`;
+      case "rescheduled": return `${name} reprogramo su cita`;
+      case "done": return `${name} completo su cita`;
+      case "cancelled": return `${name} cancelo su cita`;
+      case "no_show": return `${name} no asistio a su cita`;
+      default: return `${name} actualizo su cita`;
+    }
+  }
+
+  function activityRow(item) {
+    return `
+      <div class="activity-row">
+        <span class="activity-dot activity-${item.type}"></span>
+        <span class="activity-text">${activityLabel(item)}</span>
+        <span class="activity-time">${timeAgo(item.at)}</span>
       </div>
-    `).join("");
-    bindAppointmentRows(view, renderUpcomingView);
+    `;
+  }
+
+  async function renderTodayView() {
+    const today = isoDate(new Date());
+    const [rows, stats, activity] = await Promise.all([
+      api(`/api/admin/appointments?from=${today}&to=${today}`),
+      api(`/api/admin/dashboard-stats?date=${today}`),
+      api(`/api/admin/activity?date=${today}`),
+    ]);
+    const view = $('[data-subview="inicio"]');
+    view.innerHTML = `
+      <div class="stat-row secondary-stats">
+        <div class="stat-tile"><div class="label">Citas esta semana</div><div class="value">${stats.weekCount}</div></div>
+        <div class="stat-tile"><div class="label">Clientes totales</div><div class="value">${stats.totalClients}</div></div>
+        <div class="stat-tile"><div class="label">Clientes nuevos (mes)</div><div class="value">${stats.newClientsThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">Completadas (mes)</div><div class="value">${stats.completedThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">Canceladas (mes)</div><div class="value">${stats.cancelledThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">No asistio (mes)</div><div class="value">${stats.noShowThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">Ocupacion (semana)</div><div class="value">${stats.occupancyPercent}%</div></div>
+        <div class="stat-tile"><div class="label">Servicio mas pedido</div><div class="value value-sm">${stats.topService ? escapeHtml(stats.topService.name) : "—"}</div></div>
+      </div>
+
+      <h3 class="panel-section-title">Citas de hoy</h3>
+      <div id="todayApptList">
+        ${rows.length ? rows.map(appointmentRow).join("") : `<p class="empty-day">No hay citas agendadas para hoy.</p>`}
+      </div>
+
+      <h3 class="panel-section-title">Actividad reciente</h3>
+      <div class="activity-list">
+        ${activity.length ? activity.map(activityRow).join("") : `<p class="empty-note-block">Sin actividad reciente todavia.</p>`}
+      </div>
+    `;
+    bindAppointmentRows($("#todayApptList"), renderTodayView);
+  }
+
+  function toMinutesLocal(hhmm) {
+    const [h, m] = hhmm.split(":").map(Number);
+    return h * 60 + m;
+  }
+  function toHHMMLocal(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+  function shortDateLabel(d) {
+    return d.toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+  }
+  function startOfWeek(d) {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    date.setDate(date.getDate() + diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  const calendarState = { mode: "week", anchor: new Date() };
+
+  async function renderCalendarView() {
+    const view = $('[data-subview="agenda"]');
+    view.innerHTML = `
+      <div class="cal-toolbar">
+        <div class="cal-nav">
+          <button class="btn-secondary" id="calPrev">&larr;</button>
+          <button class="btn-secondary" id="calToday">Hoy</button>
+          <button class="btn-secondary" id="calNext">&rarr;</button>
+        </div>
+        <div class="cal-range-label" id="calRangeLabel"></div>
+        <div class="cal-mode-toggle">
+          <button class="cal-mode-btn ${calendarState.mode === "week" ? "active" : ""}" data-cal-mode="week">Semana</button>
+          <button class="cal-mode-btn ${calendarState.mode === "day" ? "active" : ""}" data-cal-mode="day">Dia</button>
+        </div>
+      </div>
+      <div class="cal-grid-scroll"><div id="calGridWrap"></div></div>
+    `;
+    $("#calPrev").addEventListener("click", () => shiftCalendar(-1));
+    $("#calNext").addEventListener("click", () => shiftCalendar(1));
+    $("#calToday").addEventListener("click", () => { calendarState.anchor = new Date(); renderCalendarBody(); });
+    $$("[data-cal-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        calendarState.mode = btn.dataset.calMode;
+        renderCalendarView();
+      });
+    });
+    await renderCalendarBody();
+  }
+
+  function shiftCalendar(dir) {
+    const days = calendarState.mode === "week" ? 7 : 1;
+    calendarState.anchor.setDate(calendarState.anchor.getDate() + dir * days);
+    renderCalendarBody();
+  }
+
+  async function renderCalendarBody() {
+    const isWeek = calendarState.mode === "week";
+    const start = isWeek ? startOfWeek(calendarState.anchor) : new Date(calendarState.anchor);
+    start.setHours(0, 0, 0, 0);
+    const count = isWeek ? 7 : 1;
+    const days = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      days.push(d);
+    }
+    const from = isoDate(days[0]);
+    const to = isoDate(days[days.length - 1]);
+
+    $("#calRangeLabel").textContent = isWeek
+      ? `${shortDateLabel(days[0])} - ${shortDateLabel(days[6])}`
+      : niceDate(from);
+
+    const hoursCfg = await api("/api/admin/hours");
+    const openDays = hoursCfg.filter((h) => !h.closed && h.open_time && h.close_time);
+    let dayStartMin = 8 * 60;
+    let dayEndMin = 20 * 60;
+    if (openDays.length) {
+      dayStartMin = Math.min(...openDays.map((h) => toMinutesLocal(h.open_time)));
+      dayEndMin = Math.max(...openDays.map((h) => toMinutesLocal(h.close_time)));
+    }
+    const slotMin = 30;
+    const rowCount = Math.max(1, Math.ceil((dayEndMin - dayStartMin) / slotMin));
+
+    const appts = await api(`/api/admin/appointments?from=${from}&to=${to}`);
+    const byDate = {};
+    appts.forEach((a) => { (byDate[a.date] = byDate[a.date] || []).push(a); });
+
+    let cells = `<div class="cal-corner" style="grid-column:1; grid-row:1"></div>`;
+    for (let r = 0; r < rowCount; r++) {
+      const mins = dayStartMin + r * slotMin;
+      if (mins % 60 === 0) {
+        cells += `<div class="cal-time-label" style="grid-column:1; grid-row:${r + 2}">${toHHMMLocal(mins)}</div>`;
+      }
+    }
+    for (let r = 0; r < rowCount; r++) {
+      for (let c = 0; c < count; c++) {
+        cells += `<div class="cal-cell" style="grid-column:${c + 2}; grid-row:${r + 2}"></div>`;
+      }
+    }
+    days.forEach((d, i) => {
+      const iso = isoDate(d);
+      const isToday = iso === isoDate(new Date());
+      cells += `<div class="cal-day-header ${isToday ? "is-today" : ""}" style="grid-column:${i + 2}; grid-row:1">${weekdayShort(iso)} ${d.getDate()}</div>`;
+      (byDate[iso] || []).forEach((a) => {
+        const startMin = toMinutesLocal(a.time);
+        const endMin = startMin + a.duration_min;
+        const r1 = Math.max(2, Math.round((startMin - dayStartMin) / slotMin) + 2);
+        const r2 = Math.max(r1 + 1, Math.round((endMin - dayStartMin) / slotMin) + 2);
+        cells += `
+          <div class="cal-appt status-${a.status}" style="grid-column:${i + 2}; grid-row:${r1} / ${r2}" title="${escapeHtml(a.client_name)} - ${escapeHtml(a.service_name)} (${statusLabel(a.status)})">
+            <span class="cal-appt-time">${a.time}</span> <span class="cal-appt-name">${escapeHtml(a.client_name)}</span>
+          </div>
+        `;
+      });
+    });
+
+    $("#calGridWrap").innerHTML = `
+      <div class="cal-grid" style="grid-template-columns: 56px repeat(${count}, minmax(90px, 1fr)); grid-template-rows: 32px repeat(${rowCount}, 26px);">
+        ${cells}
+      </div>
+    `;
   }
 
   async function renderServicesAdmin() {

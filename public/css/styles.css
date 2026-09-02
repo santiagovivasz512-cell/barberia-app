@@ -310,6 +310,54 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 }
 .stat-tile .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .stat-tile .value { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 600; margin-top: 4px; }
+.stat-tile .value.value-sm { font-size: 1rem; font-family: var(--font-body); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-row.secondary-stats { margin-top: 0; margin-bottom: 24px; }
+
+/* Actividad reciente */
+.activity-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.activity-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 0.85rem;
+}
+.activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent); }
+.activity-dot.activity-booked { background: var(--status-confirmed); }
+.activity-dot.activity-rescheduled { background: var(--status-pending); }
+.activity-dot.activity-done { background: var(--status-done); }
+.activity-dot.activity-cancelled { background: var(--status-cancelled); }
+.activity-dot.activity-no_show { background: var(--status-no_show); }
+.activity-text { flex: 1; }
+.activity-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+
+/* Calendario (Agenda) */
+.cal-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.cal-nav { display: flex; gap: 6px; }
+.cal-nav .btn-secondary { padding: 7px 14px; }
+.cal-range-label { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; text-transform: capitalize; }
+.cal-mode-toggle { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 999px; }
+.cal-mode-btn { border: none; background: transparent; color: var(--muted); font-weight: 600; padding: 6px 14px; border-radius: 999px; font-size: 0.82rem; }
+.cal-mode-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+.cal-grid-scroll { overflow-x: auto; padding-bottom: 4px; }
+.cal-grid { display: grid; position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); min-width: 480px; }
+.cal-corner { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--surface-2); }
+.cal-day-header {
+  border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--surface-2);
+  font-size: 0.75rem; font-weight: 700; text-align: center; padding: 6px 4px; color: var(--muted); text-transform: uppercase;
+}
+.cal-day-header.is-today { color: var(--accent-strong); }
+.cal-time-label { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); text-align: right; padding-right: 6px; transform: translateY(-7px); }
+.cal-cell { border-right: 1px solid var(--line); border-bottom: 1px solid rgba(217, 164, 65, 0.08); }
+.cal-appt {
+  margin: 1px 3px; border-radius: 6px; padding: 2px 6px; font-size: 0.7rem; overflow: hidden;
+  border-left: 3px solid; display: flex; flex-direction: column; line-height: 1.25; gap: 0;
+}
+.cal-appt-time { font-family: var(--font-mono); font-weight: 700; }
+.cal-appt-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-appt.status-pending { background: var(--status-pending-bg); border-color: var(--status-pending); color: var(--status-pending); }
+.cal-appt.status-confirmed { background: var(--status-confirmed-bg); border-color: var(--status-confirmed); color: var(--status-confirmed); }
+.cal-appt.status-done { background: var(--status-done-bg); border-color: var(--status-done); color: var(--status-done); }
+.cal-appt.status-cancelled { background: var(--status-cancelled-bg); border-color: var(--status-cancelled); color: var(--status-cancelled); opacity: 0.65; }
+.cal-appt.status-no_show { background: var(--status-no_show-bg); border-color: var(--status-no_show); color: var(--status-no_show); }
 
 /* Panel shell: sidebar + contenido */
 .panel-shell { display: flex; align-items: flex-start; gap: 24px; }
@@ -376,7 +424,7 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 }
 
 @media (max-width: 860px) {
-  .panel-shell { flex-direction: column; }
+  .panel-shell { flex-direction: column; align-items: stretch; }
   .panel-nav { position: static; flex: 1 1 auto; width: 100%; }
   .panel-nav-toggle {
     display: flex; align-items: center; width: 100%; border: none; background: var(--surface-2);
