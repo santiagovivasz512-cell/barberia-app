@@ -1,6 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
-const { db, getSetting, setSetting } = require("../db");
+const { db, getSetting, setSetting, upsertClient } = require("../db");
 const {
   dayOfWeekFor,
   computeAvailableSlots,
@@ -17,6 +17,15 @@ async function publicSettings() {
     currency: await getSetting("currency", "COP"),
     locale: await getSetting("locale", "es-CO"),
     slotIntervalMin: Number(await getSetting("slot_interval_min", "15")),
+    logoUrl: await getSetting("logo_url", ""),
+    description: await getSetting("description", ""),
+    phone: await getSetting("phone", ""),
+    email: await getSetting("email", ""),
+    address: await getSetting("address", ""),
+    instagram: await getSetting("instagram", ""),
+    colorPrimary: await getSetting("color_primary", "#d9a441"),
+    colorSecondary: await getSetting("color_secondary", "#f2c14e"),
+    cancellationPolicy: await getSetting("cancellation_policy", ""),
   };
 }
 
@@ -132,17 +141,21 @@ router.post(
 
     const ticketNumber = Number(await getSetting("next_ticket_number", "1"));
     const publicToken = crypto.randomUUID();
+    const trimmedName = String(clientName).trim();
+    const trimmedPhone = String(clientPhone).trim();
+    const client = await upsertClient(trimmedName, trimmedPhone);
     const info = await db
       .prepare(
         `INSERT INTO appointments
-          (public_token, ticket_number, client_name, client_phone, service_id, service_name, duration_min, price, date, time, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?) RETURNING id`
+          (public_token, ticket_number, client_name, client_phone, client_id, service_id, service_name, duration_min, price, date, time, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?) RETURNING id`
       )
       .run(
         publicToken,
         ticketNumber,
-        String(clientName).trim(),
-        String(clientPhone).trim(),
+        trimmedName,
+        trimmedPhone,
+        client.id,
         service.id,
         service.name,
         service.duration_min,

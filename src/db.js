@@ -67,6 +67,15 @@ async function initSchema() {
       closed INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS clients (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL UNIQUE,
+      email TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS appointments (
       id SERIAL PRIMARY KEY,
       public_token TEXT NOT NULL UNIQUE,
@@ -84,9 +93,81 @@ async function initSchema() {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS appointment_history (
+      id SERIAL PRIMARY KEY,
+      appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+      from_date TEXT NOT NULL,
+      from_time TEXT NOT NULL,
+      to_date TEXT NOT NULL,
+      to_time TEXT NOT NULL,
+      changed_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS time_blocks (
+      id SERIAL PRIMARY KEY,
+      date TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      all_day INTEGER NOT NULL DEFAULT 0,
+      reason TEXT,
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_token ON appointments(public_token);
+    CREATE INDEX IF NOT EXISTS idx_time_blocks_date ON time_blocks(date);
+
+    ALTER TABLE appointments ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL;
+    ALTER TABLE hours ADD COLUMN IF NOT EXISTS break_start TEXT;
+    ALTER TABLE hours ADD COLUMN IF NOT EXISTS break_end TEXT;
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS category TEXT;
   `);
+}
+
+async function upsertClient(name, phone) {
+  const existing = await db.prepare(`SELECT * FROM clients WHERE phone = ?`).get(phone);
+  if (existing) return existing;
+  const ins = await db
+    .prepare(`INSERT INTO clients (name, phone, created_at) VALUES (?, ?, ?) RETURNING id`)
+    .run(name, phone, new Date().toISOString());
+  return db.prepare(`SELECT * FROM clients WHERE id = ?`).get(ins.lastInsertRowid);
+}
+
+async function backfillClients() {
+  const rows = await db
+    .prepare(`SELECT DISTINCT client_phone, client_name FROM appointments WHERE client_id IS NULL`)
+    .all();
+  for (const r of rows) {
+    let client = await db.prepare(`SELECT id FROM clients WHERE phone = ?`).get(r.client_phone);
+    if (!client) {
+      const ins = await db
+        .prepare(`INSERT INTO clients (name, phone, created_at) VALUES (?, ?, ?) RETURNING id`)
+        .run(r.client_name, r.client_phone, new Date().toISOString());
+      client = { id: ins.lastInsertRowid };
+    }
+    await db
+      .prepare(`UPDATE appointments SET client_id = ? WHERE client_phone = ? AND client_id IS NULL`)
+      .run(client.id, r.client_phone);
+  }
+}
+
+async function ensureNewSettingDefaults() {
+  const defaults = {
+    logo_url: "",
+    description: "",
+    phone: "",
+    email: "",
+    address: "",
+    instagram: "",
+    color_primary: "#d9a441",
+    color_secondary: "#f2c14e",
+    cancellation_policy: "",
+  };
+  for (const [key, val] of Object.entries(defaults)) {
+    const existing = await getSetting(key, undefined);
+    if (existing === undefined) await setSetting(key, val);
+  }
 }
 
 async function seedIfEmpty() {
@@ -135,6 +216,8 @@ async function seedIfEmpty() {
 const ready = (async () => {
   await initSchema();
   await seedIfEmpty();
+  await ensureNewSettingDefaults();
+  await backfillClients();
 })();
 
-module.exports = { db, pool, getSetting, setSetting, ready };
+module.exports = { db, pool, getSetting, setSetting, upsertClient, ready };

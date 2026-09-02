@@ -74,6 +74,7 @@
         const target = btn.dataset.tab;
         $("#view-booking").hidden = target !== "booking";
         $("#view-panel").hidden = target !== "panel";
+        $("#app").classList.toggle("panel-mode", target === "panel");
         if (target === "panel") enterPanel();
       });
     });
@@ -267,7 +268,7 @@
     if (isLoggedIn()) {
       $("#loginBox").hidden = true;
       $("#dashboard").hidden = false;
-      loadDashboard("today");
+      loadDashboard("inicio");
     } else {
       $("#loginBox").hidden = false;
       $("#dashboard").hidden = true;
@@ -296,30 +297,82 @@
       enterPanel();
     });
 
-    $$(".subtab-btn:not(.logout)").forEach((btn) => {
+    $$(".panel-nav-btn:not(.logout)").forEach((btn) => {
       btn.addEventListener("click", () => {
-        $$(".subtab-btn").forEach((b) => b.classList.remove("active"));
+        $$(".panel-nav-btn").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         $$(".subview").forEach((v) => { v.hidden = v.dataset.subview !== btn.dataset.subtab; });
+        const label = $("#panelNavCurrentLabel");
+        if (label) label.textContent = btn.dataset.label || btn.textContent.trim();
+        collapsePanelNav();
         loadDashboard(btn.dataset.subtab);
       });
     });
+
+    initPanelNavToggle();
+  }
+
+  function initPanelNavToggle() {
+    const toggle = $("#panelNavToggle");
+    const nav = $("#panelNav");
+    if (!toggle || !nav) return;
+    toggle.addEventListener("click", () => {
+      const isOpen = nav.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", String(isOpen));
+    });
+  }
+
+  function collapsePanelNav() {
+    const nav = $("#panelNav");
+    const toggle = $("#panelNavToggle");
+    if (!nav) return;
+    nav.classList.remove("open");
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
   }
 
   async function loadDashboard(which) {
     try {
       await refreshStatRow();
-      if (which === "today") await renderTodayView();
-      if (which === "upcoming") await renderUpcomingView();
-      if (which === "services") await renderServicesAdmin();
-      if (which === "hours") await renderHoursAdmin();
-      if (which === "settings") await renderSettingsAdmin();
+      if (which === "inicio") await renderTodayView();
+      if (which === "agenda") await renderUpcomingView();
+      if (which === "clientes") renderClientesPlaceholder();
+      if (which === "servicios") await renderServicesAdmin();
+      if (which === "horarios") await renderHoursAdmin();
+      if (which === "estadisticas") renderEstadisticasPlaceholder();
+      if (which === "configuracion") await renderSettingsAdmin();
     } catch (e) {
       if (e.status === 401) {
         localStorage.removeItem("barberia_token");
         enterPanel();
       }
     }
+  }
+
+  function comingSoonPanel(icon, title, description) {
+    return `
+      <div class="coming-soon">
+        <div class="coming-soon-icon">${icon}</div>
+        <h3>${title}</h3>
+        <p>${description}</p>
+        <span class="coming-soon-tag">Proximamente</span>
+      </div>
+    `;
+  }
+
+  function renderClientesPlaceholder() {
+    $('[data-subview="clientes"]').innerHTML = comingSoonPanel(
+      "👥",
+      "CRM de clientes",
+      "Aqui vas a poder ver el listado completo de clientes, su historial de citas, cuanto han gastado y notas internas del negocio."
+    );
+  }
+
+  function renderEstadisticasPlaceholder() {
+    $('[data-subview="estadisticas"]').innerHTML = comingSoonPanel(
+      "📊",
+      "Estadisticas del negocio",
+      "Aqui vas a ver graficas de citas, ingresos, servicios mas solicitados y horarios pico, calculadas con tus propios datos."
+    );
   }
 
   async function refreshStatRow() {
@@ -353,7 +406,7 @@
     container.querySelectorAll("[data-status]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         await api(`/api/admin/appointments/${btn.dataset.id}`, { method: "PATCH", body: JSON.stringify({ status: btn.dataset.status }) });
-        const active = $(".subtab-btn.active").dataset.subtab;
+        const active = $(".panel-nav-btn.active").dataset.subtab;
         loadDashboard(active);
       });
     });
@@ -362,7 +415,7 @@
   async function renderTodayView() {
     const today = isoDate(new Date());
     const rows = await api(`/api/admin/appointments?from=${today}&to=${today}`);
-    const view = $('[data-subview="today"]');
+    const view = $('[data-subview="inicio"]');
     view.innerHTML = rows.length
       ? rows.map(appointmentRow).join("")
       : `<p class="empty-day">No hay citas agendadas para hoy.</p>`;
@@ -373,7 +426,7 @@
     const today = new Date();
     const to = new Date(today); to.setDate(to.getDate() + 13);
     const rows = await api(`/api/admin/appointments?from=${isoDate(today)}&to=${isoDate(to)}&status=confirmed`);
-    const view = $('[data-subview="upcoming"]');
+    const view = $('[data-subview="agenda"]');
     if (!rows.length) { view.innerHTML = `<p class="empty-day">No hay citas confirmadas en los proximos 14 dias.</p>`; return; }
     const byDate = {};
     rows.forEach((r) => { (byDate[r.date] = byDate[r.date] || []).push(r); });
@@ -388,7 +441,7 @@
 
   async function renderServicesAdmin() {
     const services = await api("/api/admin/services");
-    const view = $('[data-subview="services"]');
+    const view = $('[data-subview="servicios"]');
     view.innerHTML = `
       <div class="service-admin-list">
         ${services.map((s) => `
@@ -442,7 +495,7 @@
 
   async function renderHoursAdmin() {
     const hours = await api("/api/admin/hours");
-    const view = $('[data-subview="hours"]');
+    const view = $('[data-subview="horarios"]');
     view.innerHTML = `
       <div class="hours-grid">
         ${hours.map((h) => `
@@ -482,7 +535,7 @@
 
   async function renderSettingsAdmin() {
     const settings = await api("/api/admin/settings");
-    const view = $('[data-subview="settings"]');
+    const view = $('[data-subview="configuracion"]');
     view.innerHTML = `
       <form class="settings-form" id="shopSettingsForm">
         <h3>Datos del negocio</h3>
@@ -550,6 +603,23 @@
     $("#shopName").textContent = SETTINGS.shopName;
     $("#barberSub").textContent = SETTINGS.barberName;
     document.title = `${SETTINGS.shopName} · Agenda`;
+
+    const root = document.documentElement.style;
+    if (SETTINGS.colorPrimary) root.setProperty("--accent", SETTINGS.colorPrimary);
+    if (SETTINGS.colorSecondary) root.setProperty("--accent-strong", SETTINGS.colorSecondary);
+
+    const logoSlot = $("#brandLogo");
+    const poleIcon = $(".pole");
+    if (logoSlot) {
+      if (SETTINGS.logoUrl) {
+        logoSlot.innerHTML = `<img src="${escapeHtml(SETTINGS.logoUrl)}" alt="${escapeHtml(SETTINGS.shopName)}" />`;
+        logoSlot.hidden = false;
+        if (poleIcon) poleIcon.hidden = true;
+      } else {
+        logoSlot.hidden = true;
+        if (poleIcon) poleIcon.hidden = false;
+      }
+    }
   }
 
   async function init() {

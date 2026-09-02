@@ -42,7 +42,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; text-wrap: bala
 button { font-family: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 
-#app { max-width: 880px; margin: 0 auto; padding: 0 20px 64px; }
+#app { max-width: 880px; margin: 0 auto; padding: 0 20px 64px; transition: max-width .15s ease; }
+#app.panel-mode { max-width: 1320px; }
 
 /* ---------------------------------------------------------------------
    Topbar
@@ -57,6 +58,10 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 }
 
 .brand { display: flex; align-items: center; gap: 14px; }
+
+.brand-logo { display: inline-flex; flex-shrink: 0; }
+.brand-logo img { height: 40px; width: auto; border-radius: 8px; object-fit: contain; }
+.brand-logo[hidden] { display: none; }
 
 .pole {
   display: inline-flex;
@@ -302,15 +307,80 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 .stat-tile .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .stat-tile .value { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 600; margin-top: 4px; }
 
-.subtabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 18px; }
-.subtab-btn {
-  border: none; background: var(--surface-2); color: var(--muted); font-weight: 600;
-  padding: 8px 14px; border-radius: 999px; font-size: 0.85rem;
+/* Panel shell: sidebar + contenido */
+.panel-shell { display: flex; align-items: flex-start; gap: 24px; }
+
+.panel-nav {
+  flex: 0 0 216px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  position: sticky;
+  top: 16px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
-.subtab-btn.active { background: var(--accent); color: var(--accent-ink); }
-.subtab-btn.logout { margin-left: auto; background: none; color: var(--status-cancelled); }
+.panel-nav-toggle { display: none; }
+
+.panel-nav-list { display: flex; flex-direction: column; gap: 3px; }
+
+.panel-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  text-align: left;
+  width: 100%;
+  transition: background-color .12s ease, color .12s ease;
+}
+.panel-nav-btn:hover { background: var(--surface-2); color: var(--ink); }
+.panel-nav-btn.active { background: var(--accent); color: var(--accent-ink); }
+.panel-nav-btn .nav-icon { font-size: 1rem; line-height: 1; }
+.panel-nav-btn.logout { color: var(--status-cancelled); }
+.panel-nav-btn.logout:hover { background: var(--status-cancelled-bg); }
+.panel-nav-divider { height: 1px; background: var(--line); margin: 6px 6px; }
+
+.panel-content { flex: 1 1 auto; min-width: 0; }
 
 .subview[hidden] { display: none; }
+
+/* Tarjeta "Proximamente" */
+.coming-soon {
+  text-align: center;
+  padding: 48px 24px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.coming-soon-icon { font-size: 2.2rem; margin-bottom: 10px; }
+.coming-soon h3 { font-size: 1.15rem; margin-bottom: 8px; }
+.coming-soon p { color: var(--muted); max-width: 420px; margin: 0 auto; font-size: 0.9rem; }
+.coming-soon-tag {
+  display: inline-block; margin-top: 16px; font-family: var(--font-mono); font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-strong);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+}
+
+@media (max-width: 860px) {
+  .panel-shell { flex-direction: column; }
+  .panel-nav { position: static; flex: 1 1 auto; width: 100%; }
+  .panel-nav-toggle {
+    display: flex; align-items: center; width: 100%; border: none; background: var(--surface-2);
+    color: var(--ink); font-weight: 700; padding: 10px 12px; border-radius: 10px; font-size: 0.9rem;
+  }
+  .panel-nav-list { display: none; margin-top: 6px; }
+  .panel-nav.open .panel-nav-list { display: flex; }
+}
 
 .day-group { margin-bottom: 22px; }
 .day-group h3 { font-size: 1rem; margin-bottom: 10px; color: var(--muted); font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.8rem; }
@@ -371,9 +441,18 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 .save-note { color: var(--status-confirmed); font-size: 0.85rem; }
 
 @media (max-width: 560px) {
-  .apt-row { grid-template-columns: 4px 1fr; grid-template-areas: "stripe main" "stripe actions"; }
-  .apt-row .apt-time { grid-column: 2; }
-  .apt-row .apt-actions { grid-column: 2; justify-content: flex-start; }
+  .apt-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    border-left: 3px solid transparent;
+  }
+  .apt-row .stripe { display: none; }
+  .apt-row.status-confirmed { border-left-color: var(--status-confirmed); }
+  .apt-row.status-done { border-left-color: var(--status-done); }
+  .apt-row.status-cancelled { border-left-color: var(--status-cancelled); }
+  .apt-row .apt-actions { justify-content: flex-start; }
   .service-admin-row { grid-template-columns: 1fr; }
   .hours-row { grid-template-columns: 1fr; }
 }

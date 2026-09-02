@@ -13,6 +13,7 @@
   <div id="app">
     <header class="topbar">
       <div class="brand">
+        <span id="brandLogo" class="brand-logo" hidden></span>
         <span class="pole" aria-hidden="true"><span></span><span></span><span></span></span>
         <div class="brand-text">
           <h1 id="shopName">Mi Barberia</h1>
@@ -109,22 +110,35 @@
       </div>
 
       <div id="dashboard" class="dashboard" hidden>
-        <div class="stat-row" id="statRow"></div>
+        <div class="panel-shell">
+          <nav class="panel-nav" id="panelNav">
+            <button class="panel-nav-toggle" id="panelNavToggle" type="button" aria-expanded="false">
+              <span>&#9776; <span id="panelNavCurrentLabel">Inicio</span></span>
+            </button>
+            <div class="panel-nav-list" id="panelNavList">
+              <button class="panel-nav-btn active" data-subtab="inicio" data-label="Inicio"><span class="nav-icon">&#127968;</span> Inicio</button>
+              <button class="panel-nav-btn" data-subtab="agenda" data-label="Agenda"><span class="nav-icon">&#128197;</span> Agenda</button>
+              <button class="panel-nav-btn" data-subtab="clientes" data-label="Clientes"><span class="nav-icon">&#128101;</span> Clientes</button>
+              <button class="panel-nav-btn" data-subtab="servicios" data-label="Servicios"><span class="nav-icon">&#9986;&#65039;</span> Servicios</button>
+              <button class="panel-nav-btn" data-subtab="horarios" data-label="Horarios"><span class="nav-icon">&#128337;</span> Horarios</button>
+              <button class="panel-nav-btn" data-subtab="estadisticas" data-label="Estadisticas"><span class="nav-icon">&#128202;</span> Estadisticas</button>
+              <button class="panel-nav-btn" data-subtab="configuracion" data-label="Configuracion"><span class="nav-icon">&#9881;&#65039;</span> Configuracion</button>
+              <div class="panel-nav-divider"></div>
+              <button class="panel-nav-btn logout" id="logoutBtn"><span class="nav-icon">&#128682;</span> Cerrar sesion</button>
+            </div>
+          </nav>
 
-        <nav class="subtabs" role="tablist">
-          <button class="subtab-btn active" data-subtab="today">Hoy</button>
-          <button class="subtab-btn" data-subtab="upcoming">Proximas</button>
-          <button class="subtab-btn" data-subtab="services">Servicios</button>
-          <button class="subtab-btn" data-subtab="hours">Horario</button>
-          <button class="subtab-btn" data-subtab="settings">Ajustes</button>
-          <button class="subtab-btn logout" id="logoutBtn">Salir</button>
-        </nav>
-
-        <section class="subview" data-subview="today"></section>
-        <section class="subview" data-subview="upcoming" hidden></section>
-        <section class="subview" data-subview="services" hidden></section>
-        <section class="subview" data-subview="hours" hidden></section>
-        <section class="subview" data-subview="settings" hidden></section>
+          <div class="panel-content">
+            <div class="stat-row" id="statRow"></div>
+            <section class="subview" data-subview="inicio"></section>
+            <section class="subview" data-subview="agenda" hidden></section>
+            <section class="subview" data-subview="clientes" hidden></section>
+            <section class="subview" data-subview="servicios" hidden></section>
+            <section class="subview" data-subview="horarios" hidden></section>
+            <section class="subview" data-subview="estadisticas" hidden></section>
+            <section class="subview" data-subview="configuracion" hidden></section>
+          </div>
+        </div>
       </div>
 
     </main>
