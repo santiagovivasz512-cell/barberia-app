@@ -20,13 +20,23 @@ function dayOfWeekFor(dateStr) {
 }
 
 function nowInMinutesAndDate() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
+  // Se usa Intl con la zona horaria configurada (en vez de los getters locales
+  // de Date) porque el reloj del sistema operativo del hosting no siempre
+  // respeta la variable de entorno TZ (por ejemplo, en Render se quedaba en UTC).
+  const timeZone = process.env.TZ || "America/Bogota";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
   return {
-    dateStr: `${y}-${m}-${d}`,
-    minutes: now.getHours() * 60 + now.getMinutes(),
+    dateStr: `${get("year")}-${get("month")}-${get("day")}`,
+    minutes: (Number(get("hour")) % 24) * 60 + Number(get("minute")),
   };
 }
 
