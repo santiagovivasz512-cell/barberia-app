@@ -248,7 +248,13 @@
   }
 
   function statusLabel(s) {
-    return { confirmed: "Confirmada", done: "Atendida", cancelled: "Cancelada" }[s] || s;
+    return {
+      pending: "Pendiente",
+      confirmed: "Confirmada",
+      done: "Completada",
+      cancelled: "Cancelada",
+      no_show: "No asistio",
+    }[s] || s;
   }
 
   function initMyBookingsToggle() {
@@ -385,7 +391,20 @@
     `;
   }
 
+  function appointmentActions(apt) {
+    const actions = [];
+    if (apt.status === "pending") actions.push({ status: "confirmed", cls: "confirm", label: "Confirmar" });
+    if (apt.status === "pending" || apt.status === "confirmed") {
+      actions.push({ status: "done", cls: "done", label: "Completada" });
+      actions.push({ status: "no_show", cls: "no_show", label: "No asistio" });
+      actions.push({ status: "cancelled", cls: "cancel", label: "Cancelar" });
+    }
+    return actions;
+  }
+
   function appointmentRow(apt) {
+    const actions = appointmentActions(apt);
+    const canReschedule = apt.status === "pending" || apt.status === "confirmed" || apt.status === "no_show";
     return `
       <div class="apt-row status-${apt.status}">
         <div class="stripe"></div>
@@ -395,19 +414,86 @@
           <div class="apt-detail">${escapeHtml(apt.service_name)} · ${apt.duration_min} min · ${money(apt.price)} · ${escapeHtml(apt.client_phone)}</div>
         </div>
         <div class="apt-actions">
-          ${apt.status === "confirmed" ? `<button class="pill-btn done" data-status="done" data-id="${apt.id}">Completada</button>` : ""}
-          ${apt.status !== "cancelled" ? `<button class="pill-btn cancel" data-status="cancelled" data-id="${apt.id}">Cancelar</button>` : ""}
+          ${actions.map((a) => `<button class="pill-btn ${a.cls}" data-status="${a.status}" data-id="${apt.id}">${a.label}</button>`).join("")}
+          ${canReschedule ? `<button class="pill-btn reschedule" data-reschedule-toggle="${apt.id}">Reprogramar</button>` : ""}
         </div>
+        ${canReschedule ? `<div class="reschedule-box" data-reschedule-box="${apt.id}" data-apt-date="${apt.date}" data-apt-time="${apt.time}" hidden></div>` : ""}
       </div>
     `;
   }
 
-  function bindStatusButtons(container) {
+  function rescheduleFormHtml(apt) {
+    return `
+      <div class="reschedule-form">
+        <label>Nueva fecha <input type="date" class="resched-date" value="${apt.date}" /></label>
+        <label>Nueva hora
+          <select class="resched-time"><option value="">Elige una fecha</option></select>
+        </label>
+        <button type="button" class="btn-primary resched-save" disabled>Guardar cambio</button>
+        <button type="button" class="btn-secondary resched-cancel">Cancelar</button>
+        <p class="form-error resched-error" hidden></p>
+      </div>
+    `;
+  }
+
+  async function loadRescheduleOptions(box, id, date) {
+    const select = box.querySelector(".resched-time");
+    const saveBtn = box.querySelector(".resched-save");
+    select.innerHTML = `<option value="">Cargando...</option>`;
+    saveBtn.disabled = true;
+    try {
+      const res = await api(`/api/admin/appointments/${id}/reschedule-options?date=${date}`);
+      if (!res.slots.length) {
+        select.innerHTML = `<option value="">Sin horarios disponibles ese dia</option>`;
+        return;
+      }
+      select.innerHTML = `<option value="">Elige una hora</option>` + res.slots.map((t) => `<option value="${t}">${t}</option>`).join("");
+      select.addEventListener("change", () => { saveBtn.disabled = !select.value; }, { once: true });
+    } catch (e) {
+      select.innerHTML = `<option value="">No se pudo cargar</option>`;
+    }
+  }
+
+  function bindAppointmentRows(container, reload) {
     container.querySelectorAll("[data-status]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         await api(`/api/admin/appointments/${btn.dataset.id}`, { method: "PATCH", body: JSON.stringify({ status: btn.dataset.status }) });
-        const active = $(".panel-nav-btn.active").dataset.subtab;
-        loadDashboard(active);
+        reload();
+      });
+    });
+
+    container.querySelectorAll("[data-reschedule-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.rescheduleToggle;
+        const box = container.querySelector(`[data-reschedule-box="${id}"]`);
+        if (!box) return;
+        const willOpen = box.hidden;
+        container.querySelectorAll(".reschedule-box").forEach((b) => { b.hidden = true; b.innerHTML = ""; });
+        if (!willOpen) return;
+        box.hidden = false;
+        box.innerHTML = rescheduleFormHtml({ date: box.dataset.aptDate, time: box.dataset.aptTime });
+        loadRescheduleOptions(box, id, box.dataset.aptDate);
+
+        box.querySelector(".resched-date").addEventListener("change", (e) => {
+          loadRescheduleOptions(box, id, e.target.value);
+        });
+        box.querySelector(".resched-cancel").addEventListener("click", () => {
+          box.hidden = true;
+          box.innerHTML = "";
+        });
+        box.querySelector(".resched-save").addEventListener("click", async () => {
+          const date = box.querySelector(".resched-date").value;
+          const time = box.querySelector(".resched-time").value;
+          const errBox = box.querySelector(".resched-error");
+          errBox.hidden = true;
+          try {
+            await api(`/api/admin/appointments/${id}/reschedule`, { method: "POST", body: JSON.stringify({ date, time }) });
+            reload();
+          } catch (e) {
+            errBox.textContent = e.message;
+            errBox.hidden = false;
+          }
+        });
       });
     });
   }
@@ -419,15 +505,16 @@
     view.innerHTML = rows.length
       ? rows.map(appointmentRow).join("")
       : `<p class="empty-day">No hay citas agendadas para hoy.</p>`;
-    bindStatusButtons(view);
+    bindAppointmentRows(view, renderTodayView);
   }
 
   async function renderUpcomingView() {
     const today = new Date();
     const to = new Date(today); to.setDate(to.getDate() + 13);
-    const rows = await api(`/api/admin/appointments?from=${isoDate(today)}&to=${isoDate(to)}&status=confirmed`);
+    const rows = (await api(`/api/admin/appointments?from=${isoDate(today)}&to=${isoDate(to)}`))
+      .filter((r) => r.status === "confirmed" || r.status === "pending");
     const view = $('[data-subview="agenda"]');
-    if (!rows.length) { view.innerHTML = `<p class="empty-day">No hay citas confirmadas en los proximos 14 dias.</p>`; return; }
+    if (!rows.length) { view.innerHTML = `<p class="empty-day">No hay citas pendientes ni confirmadas en los proximos 14 dias.</p>`; return; }
     const byDate = {};
     rows.forEach((r) => { (byDate[r.date] = byDate[r.date] || []).push(r); });
     view.innerHTML = Object.keys(byDate).sort().map((date) => `
@@ -436,7 +523,7 @@
         ${byDate[date].map(appointmentRow).join("")}
       </div>
     `).join("");
-    bindStatusButtons(view);
+    bindAppointmentRows(view, renderUpcomingView);
   }
 
   async function renderServicesAdmin() {
@@ -497,24 +584,50 @@
     const hours = await api("/api/admin/hours");
     const view = $('[data-subview="horarios"]');
     view.innerHTML = `
+      <h3 class="panel-section-title">Horario semanal</h3>
       <div class="hours-grid">
-        ${hours.map((h) => `
+        ${hours.map((h) => {
+          const hasBreak = !!(h.break_start && h.break_end);
+          return `
           <div class="hours-row" data-day="${h.day_of_week}">
             <strong>${DOW_NAMES[h.day_of_week]}</strong>
             <label class="closed-toggle"><input type="checkbox" data-field="closed" ${h.closed ? "checked" : ""} /> Cerrado</label>
             <input type="time" data-field="open_time" value="${h.open_time || "09:00"}" ${h.closed ? "disabled" : ""} />
             <input type="time" data-field="close_time" value="${h.close_time || "19:00"}" ${h.closed ? "disabled" : ""} />
+            <label class="closed-toggle"><input type="checkbox" data-field="has_break" ${hasBreak ? "checked" : ""} ${h.closed ? "disabled" : ""} /> Descanso</label>
+            <input type="time" data-field="break_start" value="${h.break_start || "13:00"}" ${!hasBreak || h.closed ? "disabled" : ""} />
+            <input type="time" data-field="break_end" value="${h.break_end || "14:00"}" ${!hasBreak || h.closed ? "disabled" : ""} />
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
       <button class="btn-primary" id="saveHoursBtn">Guardar horario</button>
       <p class="save-note" id="hoursSaveNote" hidden>Horario guardado.</p>
+
+      <h3 class="panel-section-title">Bloqueos manuales</h3>
+      <p class="hint-text">Bloquea espacios puntuales (almuerzo, cita personal, dia no disponible). Los clientes no podran reservar sobre estos horarios.</p>
+      <div id="timeBlocksList" class="time-blocks-list"></div>
+      <form class="service-form" id="newBlockForm">
+        <label>Fecha <input type="date" name="date" required /></label>
+        <label class="closed-toggle" style="align-self:center;"><input type="checkbox" name="allDay" id="blockAllDay" /> Todo el dia</label>
+        <label>Desde <input type="time" name="startTime" value="13:00" /></label>
+        <label>Hasta <input type="time" name="endTime" value="14:00" /></label>
+        <label>Motivo (opcional) <input type="text" name="reason" placeholder="Ej: Cita personal" /></label>
+        <button type="submit" class="btn-primary">Agregar bloqueo</button>
+      </form>
     `;
 
     view.querySelectorAll(".hours-row").forEach((row) => {
       row.querySelector('[data-field="closed"]').addEventListener("change", (e) => {
         row.querySelector('[data-field="open_time"]').disabled = e.target.checked;
         row.querySelector('[data-field="close_time"]').disabled = e.target.checked;
+        row.querySelector('[data-field="has_break"]').disabled = e.target.checked;
+        row.querySelector('[data-field="break_start"]').disabled = e.target.checked || !row.querySelector('[data-field="has_break"]').checked;
+        row.querySelector('[data-field="break_end"]').disabled = e.target.checked || !row.querySelector('[data-field="has_break"]').checked;
+      });
+      row.querySelector('[data-field="has_break"]').addEventListener("change", (e) => {
+        row.querySelector('[data-field="break_start"]').disabled = !e.target.checked;
+        row.querySelector('[data-field="break_end"]').disabled = !e.target.checked;
       });
     });
 
@@ -525,11 +638,60 @@
         closed: row.querySelector('[data-field="closed"]').checked,
         open_time: row.querySelector('[data-field="open_time"]').value,
         close_time: row.querySelector('[data-field="close_time"]').value,
+        break_start: row.querySelector('[data-field="has_break"]').checked ? row.querySelector('[data-field="break_start"]').value : null,
+        break_end: row.querySelector('[data-field="has_break"]').checked ? row.querySelector('[data-field="break_end"]').value : null,
       }));
       await api("/api/admin/hours", { method: "PUT", body: JSON.stringify(payload) });
       const note = $("#hoursSaveNote");
       note.hidden = false;
       setTimeout(() => { note.hidden = true; }, 2500);
+    });
+
+    await renderTimeBlocksList();
+
+    $("#blockAllDay").addEventListener("change", (e) => {
+      const form = $("#newBlockForm");
+      form.querySelector('[name="startTime"]').disabled = e.target.checked;
+      form.querySelector('[name="endTime"]').disabled = e.target.checked;
+    });
+
+    $("#newBlockForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      await api("/api/admin/time-blocks", { method: "POST", body: JSON.stringify({
+        date: fd.get("date"),
+        allDay: fd.get("allDay") === "on",
+        startTime: fd.get("startTime"),
+        endTime: fd.get("endTime"),
+        reason: fd.get("reason"),
+      }) });
+      e.target.reset();
+      await renderTimeBlocksList();
+    });
+  }
+
+  async function renderTimeBlocksList() {
+    const today = isoDate(new Date());
+    const blocks = await api(`/api/admin/time-blocks?from=${today}`);
+    const box = $("#timeBlocksList");
+    if (!box) return;
+    box.innerHTML = blocks.length
+      ? blocks.map((b) => `
+        <div class="time-block-row">
+          <div>
+            <strong>${niceDate(b.date)}</strong>
+            <span class="mb-info">${b.all_day ? "Todo el dia" : `${b.start_time} - ${b.end_time}`}${b.reason ? ` · ${escapeHtml(b.reason)}` : ""}</span>
+          </div>
+          <button class="pill-btn cancel" data-delete-block="${b.id}">Eliminar</button>
+        </div>
+      `).join("")
+      : `<p class="empty-note-block">No hay bloqueos proximos.</p>`;
+
+    box.querySelectorAll("[data-delete-block]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await api(`/api/admin/time-blocks/${btn.dataset.deleteBlock}`, { method: "DELETE" });
+        renderTimeBlocksList();
+      });
     });
   }
 

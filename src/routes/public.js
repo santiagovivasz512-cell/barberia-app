@@ -1,10 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { db, getSetting, setSetting, upsertClient } = require("../db");
-const {
-  dayOfWeekFor,
-  computeAvailableSlots,
-} = require("../availability");
+const { computeSlotsForDate } = require("../scheduling");
 const { sendBookingNotification } = require("../mailer");
 const { asyncHandler } = require("../asyncHandler");
 
@@ -74,18 +71,9 @@ router.get(
       return res.status(404).json({ error: "Servicio no encontrado." });
     }
 
-    const dow = dayOfWeekFor(date);
-    const dayHours = await db.prepare("SELECT * FROM hours WHERE day_of_week = ?").get(dow);
-
-    const existing = await db
-      .prepare("SELECT time, duration_min FROM appointments WHERE date = ? AND status != 'cancelled'")
-      .all(date);
-
-    const slots = computeAvailableSlots({
-      dateStr: date,
+    const slots = await computeSlotsForDate({
+      date,
       durationMin: service.duration_min,
-      dayHours,
-      existingAppointments: existing,
       slotIntervalMin: Number(await getSetting("slot_interval_min", "15")),
       minNoticeMin: Number(await getSetting("min_notice_min", "30")),
     });
@@ -120,16 +108,9 @@ router.post(
     if (!service) return res.status(404).json({ error: "Servicio no encontrado." });
 
     // Revalidar disponibilidad justo antes de guardar (evita choques de horario).
-    const dow = dayOfWeekFor(date);
-    const dayHours = await db.prepare("SELECT * FROM hours WHERE day_of_week = ?").get(dow);
-    const existing = await db
-      .prepare("SELECT time, duration_min FROM appointments WHERE date = ? AND status != 'cancelled'")
-      .all(date);
-    const slots = computeAvailableSlots({
-      dateStr: date,
+    const slots = await computeSlotsForDate({
+      date,
       durationMin: service.duration_min,
-      dayHours,
-      existingAppointments: existing,
       slotIntervalMin: Number(await getSetting("slot_interval_min", "15")),
       minNoticeMin: Number(await getSetting("min_notice_min", "30")),
     });

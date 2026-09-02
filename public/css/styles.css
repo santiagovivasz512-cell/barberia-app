@@ -11,12 +11,16 @@
   --accent: #d9a441;
   --accent-strong: #f2c14e;
   --accent-ink: #1a1408;
-  --status-confirmed: #8fbb70;
-  --status-confirmed-bg: rgba(143, 187, 112, 0.16);
-  --status-done: #c9b795;
-  --status-done-bg: rgba(201, 183, 149, 0.14);
+  --status-pending: #e0b34d;
+  --status-pending-bg: rgba(224, 179, 77, 0.18);
+  --status-confirmed: #6fa8d8;
+  --status-confirmed-bg: rgba(111, 168, 216, 0.16);
+  --status-done: #8fbb70;
+  --status-done-bg: rgba(143, 187, 112, 0.16);
   --status-cancelled: #e2684f;
   --status-cancelled-bg: rgba(226, 104, 79, 0.16);
+  --status-no_show: #b5766a;
+  --status-no_show-bg: rgba(181, 118, 106, 0.18);
   --shadow: 0 16px 40px -18px rgba(0, 0, 0, 0.75);
   --radius: 14px;
   --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
@@ -345,7 +349,7 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 }
 .panel-nav-btn:hover { background: var(--surface-2); color: var(--ink); }
 .panel-nav-btn.active { background: var(--accent); color: var(--accent-ink); }
-.panel-nav-btn .nav-icon { font-size: 1rem; line-height: 1; }
+.panel-nav-btn .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
 .panel-nav-btn.logout { color: var(--status-cancelled); }
 .panel-nav-btn.logout:hover { background: var(--status-cancelled-bg); }
 .panel-nav-divider { height: 1px; background: var(--line); margin: 6px 6px; }
@@ -397,22 +401,38 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
   margin-bottom: 8px;
 }
 .apt-row .stripe { align-self: stretch; border-radius: 4px; }
+.apt-row.status-pending .stripe { background: var(--status-pending); }
 .apt-row.status-confirmed .stripe { background: var(--status-confirmed); }
 .apt-row.status-done .stripe { background: var(--status-done); }
 .apt-row.status-cancelled .stripe { background: var(--status-cancelled); }
+.apt-row.status-no_show .stripe { background: var(--status-no_show); }
 .apt-row .apt-time { font-family: var(--font-mono); font-weight: 600; }
 .apt-row .apt-main .apt-client { font-weight: 700; }
 .apt-row .apt-main .apt-detail { color: var(--muted); font-size: 0.85rem; }
 .apt-row .apt-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.apt-row .reschedule-box { grid-column: 1 / -1; }
+.apt-row .reschedule-box[hidden] { display: none; }
+.reschedule-form {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; margin-top: 10px;
+}
+.reschedule-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+.reschedule-form .resched-error { flex-basis: 100%; margin: 4px 0 0; }
 .pill-btn {
   border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px;
   padding: 6px 12px; font-size: 0.78rem; font-weight: 600; color: var(--ink);
 }
-.pill-btn.done { border-color: var(--status-confirmed); color: var(--status-confirmed); }
+.pill-btn.pending { border-color: var(--status-pending); color: var(--status-pending); }
+.pill-btn.confirm { border-color: var(--status-confirmed); color: var(--status-confirmed); }
+.pill-btn.done { border-color: var(--status-done); color: var(--status-done); }
 .pill-btn.cancel { border-color: var(--status-cancelled); color: var(--status-cancelled); }
+.pill-btn.no_show { border-color: var(--status-no_show); color: var(--status-no_show); }
 .status-tag { font-size: 0.72rem; font-family: var(--font-mono); padding: 3px 8px; border-radius: 999px; }
+.status-tag.status-pending { background: var(--status-pending-bg); color: var(--status-pending); }
 .status-tag.status-confirmed { background: var(--status-confirmed-bg); color: var(--status-confirmed); }
 .status-tag.status-done { background: var(--status-done-bg); color: var(--status-done); }
+.status-tag.status-no_show { background: var(--status-no_show-bg); color: var(--status-no_show); }
 .status-tag.status-cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled); }
 
 .empty-day { color: var(--muted); padding: 30px 0; text-align: center; }
@@ -430,8 +450,20 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 .service-form input { width: 160px; }
 
 /* Hours admin */
+.panel-section-title { font-size: 1rem; margin: 24px 0 12px; }
+.panel-section-title:first-child { margin-top: 0; }
+.hint-text { color: var(--muted); font-size: 0.85rem; margin: -6px 0 14px; }
+
 .hours-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
-.hours-row { display: grid; grid-template-columns: 110px auto 1fr 1fr; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.hours-row { display: grid; grid-template-columns: 100px auto 1fr 1fr auto 1fr 1fr; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+
+.time-blocks-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.time-block-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+}
+.time-block-row .mb-info { display: block; font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+.empty-note-block { color: var(--muted); font-size: 0.9rem; padding: 8px 0 16px; }
 .hours-row input[type="time"] { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
 .hours-row label.closed-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
 
@@ -449,10 +481,14 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
     border-left: 3px solid transparent;
   }
   .apt-row .stripe { display: none; }
+  .apt-row.status-pending { border-left-color: var(--status-pending); }
   .apt-row.status-confirmed { border-left-color: var(--status-confirmed); }
   .apt-row.status-done { border-left-color: var(--status-done); }
   .apt-row.status-cancelled { border-left-color: var(--status-cancelled); }
-  .apt-row .apt-actions { justify-content: flex-start; }
+  .apt-row.status-no_show { border-left-color: var(--status-no_show); }
+  .apt-row .apt-actions { justify-content: flex-start; align-self: stretch; }
+  .apt-row .reschedule-box { align-self: stretch; }
+  .reschedule-form { flex-direction: column; align-items: stretch; }
   .service-admin-row { grid-template-columns: 1fr; }
   .hours-row { grid-template-columns: 1fr; }
 }

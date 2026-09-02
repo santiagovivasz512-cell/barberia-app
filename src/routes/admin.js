@@ -3,6 +3,9 @@ const bcrypt = require("bcryptjs");
 const { db, getSetting, setSetting } = require("../db");
 const { requireAdmin } = require("../auth");
 const { asyncHandler } = require("../asyncHandler");
+const { computeSlotsForDate } = require("../scheduling");
+
+const APPOINTMENT_STATUSES = ["pending", "confirmed", "done", "cancelled", "no_show"];
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -36,13 +39,83 @@ router.patch(
   "/appointments/:id",
   asyncHandler(async (req, res) => {
     const { status } = req.body || {};
-    if (!["confirmed", "done", "cancelled"].includes(status)) {
+    if (!APPOINTMENT_STATUSES.includes(status)) {
       return res.status(400).json({ error: "Estado invalido." });
     }
     const row = await db.prepare("SELECT * FROM appointments WHERE id = ?").get(req.params.id);
     if (!row) return res.status(404).json({ error: "No encontrada." });
     await db.prepare("UPDATE appointments SET status = ? WHERE id = ?").run(status, req.params.id);
     res.json(await db.prepare("SELECT * FROM appointments WHERE id = ?").get(req.params.id));
+  })
+);
+
+router.post(
+  "/appointments/:id/reschedule",
+  asyncHandler(async (req, res) => {
+    const { date, time } = req.body || {};
+    if (!date || !time || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+      return res.status(400).json({ error: "Fecha u hora con formato invalido." });
+    }
+    const row = await db.prepare("SELECT * FROM appointments WHERE id = ?").get(req.params.id);
+    if (!row) return res.status(404).json({ error: "No encontrada." });
+    if (row.status === "cancelled") {
+      return res.status(400).json({ error: "No se puede reprogramar una cita cancelada." });
+    }
+
+    const slots = await computeSlotsForDate({
+      date,
+      durationMin: row.duration_min,
+      slotIntervalMin: Number(await getSetting("slot_interval_min", "15")),
+      minNoticeMin: Number(await getSetting("min_notice_min", "30")),
+      excludeAppointmentId: row.id,
+    });
+    if (!slots.includes(time)) {
+      return res.status(409).json({ error: "Ese horario ya no esta disponible. Elige otro." });
+    }
+
+    await db
+      .prepare(
+        `INSERT INTO appointment_history (appointment_id, from_date, from_time, to_date, to_time, changed_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(row.id, row.date, row.time, date, time, new Date().toISOString());
+
+    const nextStatus = row.status === "no_show" ? "confirmed" : row.status;
+    await db
+      .prepare("UPDATE appointments SET date = ?, time = ?, status = ? WHERE id = ?")
+      .run(date, time, nextStatus, row.id);
+
+    res.json(await db.prepare("SELECT * FROM appointments WHERE id = ?").get(row.id));
+  })
+);
+
+router.get(
+  "/appointments/:id/reschedule-options",
+  asyncHandler(async (req, res) => {
+    const { date } = req.query;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Parametro 'date' invalido." });
+    }
+    const row = await db.prepare("SELECT * FROM appointments WHERE id = ?").get(req.params.id);
+    if (!row) return res.status(404).json({ error: "No encontrada." });
+    const slots = await computeSlotsForDate({
+      date,
+      durationMin: row.duration_min,
+      slotIntervalMin: Number(await getSetting("slot_interval_min", "15")),
+      minNoticeMin: Number(await getSetting("min_notice_min", "30")),
+      excludeAppointmentId: row.id,
+    });
+    res.json({ date, slots });
+  })
+);
+
+router.get(
+  "/appointments/:id/history",
+  asyncHandler(async (req, res) => {
+    const rows = await db
+      .prepare("SELECT * FROM appointment_history WHERE appointment_id = ? ORDER BY changed_at ASC")
+      .all(req.params.id);
+    res.json(rows);
   })
 );
 
@@ -133,14 +206,73 @@ router.put(
       return res.status(400).json({ error: "Se esperan los 7 dias de la semana." });
     }
     const stmt = db.prepare(
-      `INSERT INTO hours (day_of_week, open_time, close_time, closed) VALUES (?, ?, ?, ?)
+      `INSERT INTO hours (day_of_week, open_time, close_time, closed, break_start, break_end)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (day_of_week) DO UPDATE SET open_time = excluded.open_time,
-         close_time = excluded.close_time, closed = excluded.closed`
+         close_time = excluded.close_time, closed = excluded.closed,
+         break_start = excluded.break_start, break_end = excluded.break_end`
     );
     for (const d of days) {
-      await stmt.run(d.day_of_week, d.closed ? null : d.open_time, d.closed ? null : d.close_time, d.closed ? 1 : 0);
+      const hasBreak = !d.closed && d.break_start && d.break_end;
+      await stmt.run(
+        d.day_of_week,
+        d.closed ? null : d.open_time,
+        d.closed ? null : d.close_time,
+        d.closed ? 1 : 0,
+        hasBreak ? d.break_start : null,
+        hasBreak ? d.break_end : null
+      );
     }
     res.json(await db.prepare("SELECT * FROM hours ORDER BY day_of_week ASC").all());
+  })
+);
+
+// ---- Bloqueos manuales de horario --------------------------------------
+
+router.get(
+  "/time-blocks",
+  asyncHandler(async (req, res) => {
+    const { from, to } = req.query;
+    let sql = "SELECT * FROM time_blocks WHERE 1=1";
+    const params = [];
+    if (from) {
+      sql += " AND date >= ?";
+      params.push(from);
+    }
+    if (to) {
+      sql += " AND date <= ?";
+      params.push(to);
+    }
+    sql += " ORDER BY date ASC, start_time ASC NULLS FIRST";
+    res.json(await db.prepare(sql).all(...params));
+  })
+);
+
+router.post(
+  "/time-blocks",
+  asyncHandler(async (req, res) => {
+    const { date, startTime, endTime, allDay, reason } = req.body || {};
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Fecha invalida." });
+    }
+    if (!allDay && (!startTime || !endTime)) {
+      return res.status(400).json({ error: "Indica hora de inicio y fin, o marca todo el dia." });
+    }
+    const info = await db
+      .prepare(
+        `INSERT INTO time_blocks (date, start_time, end_time, all_day, reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?) RETURNING id`
+      )
+      .run(date, allDay ? null : startTime, allDay ? null : endTime, allDay ? 1 : 0, reason || null, new Date().toISOString());
+    res.status(201).json(await db.prepare("SELECT * FROM time_blocks WHERE id = ?").get(info.lastInsertRowid));
+  })
+);
+
+router.delete(
+  "/time-blocks/:id",
+  asyncHandler(async (req, res) => {
+    await db.prepare("DELETE FROM time_blocks WHERE id = ?").run(req.params.id);
+    res.json({ ok: true });
   })
 );
 
