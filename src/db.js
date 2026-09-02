@@ -1,86 +1,109 @@
-const path = require("path");
-const fs = require("fs");
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 
-const DATA_DIR = path.join(__dirname, "..", "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
-const db = new Database(path.join(DATA_DIR, "barberia.db"));
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+function toPgSql(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
+// Envoltorio delgado sobre "pg" que imita el estilo prepare().get/all/run()
+// (para no reescribir cada consulta de las rutas), pero de forma asincrona.
+const db = {
+  prepare(sql) {
+    const pgSql = toPgSql(sql);
+    return {
+      all: async (...params) => (await pool.query(pgSql, params)).rows,
+      get: async (...params) => (await pool.query(pgSql, params)).rows[0],
+      run: async (...params) => {
+        const res = await pool.query(pgSql, params);
+        return {
+          changes: res.rowCount,
+          lastInsertRowid: res.rows[0] ? res.rows[0].id : undefined,
+        };
+      },
+    };
+  },
+};
 
-  CREATE TABLE IF NOT EXISTS services (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    duration_min INTEGER NOT NULL,
-    price INTEGER NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1,
-    sort_order INTEGER NOT NULL DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS hours (
-    day_of_week INTEGER PRIMARY KEY, -- 0=domingo .. 6=sabado
-    open_time TEXT,
-    close_time TEXT,
-    closed INTEGER NOT NULL DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS appointments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    public_token TEXT NOT NULL UNIQUE,
-    ticket_number INTEGER NOT NULL,
-    client_name TEXT NOT NULL,
-    client_phone TEXT NOT NULL,
-    service_id INTEGER,
-    service_name TEXT NOT NULL,
-    duration_min INTEGER NOT NULL,
-    price INTEGER NOT NULL,
-    date TEXT NOT NULL,   -- YYYY-MM-DD
-    time TEXT NOT NULL,   -- HH:MM
-    status TEXT NOT NULL DEFAULT 'confirmed', -- confirmed | done | cancelled
-    notes TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE SET NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_token ON appointments(public_token);
-`);
-
-function getSetting(key, fallback) {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+async function getSetting(key, fallback) {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
   return row ? row.value : fallback;
 }
 
-function setSetting(key, value) {
-  db.prepare(
-    `INSERT INTO settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-  ).run(key, String(value));
+async function setSetting(key, value) {
+  await db
+    .prepare(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value`
+    )
+    .run(key, String(value));
 }
 
-function seedIfEmpty() {
-  const seeded = getSetting("seeded", null);
+async function initSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS services (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      duration_min INTEGER NOT NULL,
+      price INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS hours (
+      day_of_week INTEGER PRIMARY KEY,
+      open_time TEXT,
+      close_time TEXT,
+      closed INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS appointments (
+      id SERIAL PRIMARY KEY,
+      public_token TEXT NOT NULL UNIQUE,
+      ticket_number INTEGER NOT NULL,
+      client_name TEXT NOT NULL,
+      client_phone TEXT NOT NULL,
+      service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
+      service_name TEXT NOT NULL,
+      duration_min INTEGER NOT NULL,
+      price INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'confirmed',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_token ON appointments(public_token);
+  `);
+}
+
+async function seedIfEmpty() {
+  const seeded = await getSetting("seeded", null);
   if (seeded) return;
 
-  setSetting("shop_name", "Mi Barberia");
-  setSetting("barber_name", "Barbero");
-  setSetting("currency", "COP");
-  setSetting("locale", "es-CO");
-  setSetting("slot_interval_min", "15");
-  setSetting("min_notice_min", "30"); // no permitir reservar con menos de 30 min de antelacion
-  setSetting("next_ticket_number", "1");
+  await setSetting("shop_name", "Mi Barberia");
+  await setSetting("barber_name", "Barbero");
+  await setSetting("currency", "COP");
+  await setSetting("locale", "es-CO");
+  await setSetting("slot_interval_min", "15");
+  await setSetting("min_notice_min", "30");
+  await setSetting("next_ticket_number", "1");
 
   const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || "cambiame123";
   const hash = bcrypt.hashSync(initialPassword, 10);
-  setSetting("admin_password_hash", hash);
+  await setSetting("admin_password_hash", hash);
 
   const insertService = db.prepare(
     `INSERT INTO services (name, duration_min, price, active, sort_order) VALUES (?, ?, ?, 1, ?)`
@@ -92,20 +115,26 @@ function seedIfEmpty() {
     ["Corte a maquina (fade)", 40, 28000],
     ["Corte nino", 30, 20000],
   ];
-  defaultServices.forEach((s, i) => insertService.run(s[0], s[1], s[2], i));
+  for (let i = 0; i < defaultServices.length; i++) {
+    const s = defaultServices[i];
+    await insertService.run(s[0], s[1], s[2], i);
+  }
 
   const insertHours = db.prepare(
     `INSERT INTO hours (day_of_week, open_time, close_time, closed) VALUES (?, ?, ?, ?)`
   );
   // 0 = domingo ... 6 = sabado. Cerrado el domingo y el martes por defecto.
   for (let d = 0; d <= 6; d++) {
-    if (d === 0 || d === 2) insertHours.run(d, null, null, 1);
-    else insertHours.run(d, "09:00", "19:00", 0);
+    if (d === 0 || d === 2) await insertHours.run(d, null, null, 1);
+    else await insertHours.run(d, "09:00", "19:00", 0);
   }
 
-  setSetting("seeded", "1");
+  await setSetting("seeded", "1");
 }
 
-seedIfEmpty();
+const ready = (async () => {
+  await initSchema();
+  await seedIfEmpty();
+})();
 
-module.exports = { db, getSetting, setSetting };
+module.exports = { db, pool, getSetting, setSetting, ready };

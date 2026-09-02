@@ -10,7 +10,7 @@ async function sendBookingNotification(appointment) {
     return;
   }
 
-  const shopName = getSetting("shop_name", "Mi Barberia");
+  const shopName = await getSetting("shop_name", "Mi Barberia");
   const from = process.env.MAIL_FROM || "onboarding@resend.dev";
 
   const ticket = `#${String(appointment.ticket_number).padStart(4, "0")}`;
