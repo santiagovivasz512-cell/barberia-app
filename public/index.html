@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agenda de la barberia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="pole" aria-hidden="true"><span></span><span></span><span></span></span>
+        <div class="brand-text">
+          <h1 id="shopName">Mi Barberia</h1>
+          <p id="barberSub" class="brand-sub">Barbero</p>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="booking" role="tab" aria-selected="true">Reservar</button>
+        <button class="tab-btn" data-tab="panel" role="tab" aria-selected="false">Panel del barbero</button>
+      </nav>
+    </header>
+
+    <main id="view-booking" class="view">
+      <section class="stepper-shell">
+        <ol class="steps" id="stepIndicator">
+          <li data-step="1" class="active"><span>1</span>Servicio</li>
+          <li data-step="2"><span>2</span>Fecha</li>
+          <li data-step="3"><span>3</span>Hora</li>
+          <li data-step="4"><span>4</span>Tus datos</li>
+        </ol>
+
+        <div class="ticket">
+          <div class="ticket-body">
+
+            <div class="step-panel" data-step-panel="1">
+              <h2>Elige el servicio</h2>
+              <div id="serviceList" class="service-grid" aria-live="polite"></div>
+            </div>
+
+            <div class="step-panel" data-step-panel="2" hidden>
+              <h2>Elige el dia</h2>
+              <div class="selected-service" id="chosenServiceLine"></div>
+              <div id="dateStrip" class="date-strip" aria-live="polite"></div>
+              <button class="link-back" data-back="1">&larr; Cambiar servicio</button>
+            </div>
+
+            <div class="step-panel" data-step-panel="3" hidden>
+              <h2>Elige la hora</h2>
+              <div class="selected-service" id="chosenDateLine"></div>
+              <div id="slotList" class="slot-grid" aria-live="polite"></div>
+              <button class="link-back" data-back="2">&larr; Cambiar dia</button>
+            </div>
+
+            <div class="step-panel" data-step-panel="4" hidden>
+              <h2>Tus datos</h2>
+              <div class="selected-service" id="chosenTimeLine"></div>
+              <form id="bookingForm" class="booking-form">
+                <label>
+                  Nombre completo
+                  <input type="text" name="clientName" required autocomplete="name" placeholder="Ej: Camila Rios" />
+                </label>
+                <label>
+                  Numero de whatsapp / telefono
+                  <input type="tel" name="clientPhone" required autocomplete="tel" placeholder="Ej: 3001234567" />
+                </label>
+                <button type="submit" class="btn-primary">Confirmar reserva</button>
+                <p class="form-error" id="bookingError" hidden></p>
+              </form>
+              <button class="link-back" data-back="3">&larr; Cambiar hora</button>
+            </div>
+
+            <div class="step-panel" data-step-panel="confirm" hidden>
+              <div class="confirm-head">
+                <span class="check">&#10003;</span>
+                <h2>Reserva confirmada</h2>
+              </div>
+              <div class="stub" id="confirmStub"></div>
+              <button class="btn-secondary" id="bookAnotherBtn">Reservar otra cita</button>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <section class="my-bookings">
+        <button class="link-toggle" id="toggleMyBookings">Mis reservas &darr;</button>
+        <div id="myBookingsList" class="my-bookings-list" hidden></div>
+      </section>
+    </main>
+
+    <main id="view-panel" class="view" hidden>
+
+      <div id="loginBox" class="login-box">
+        <h2>Panel del barbero</h2>
+        <p class="muted">Acceso privado. Ingresa la contrasena del panel para ver la agenda.</p>
+        <form id="loginForm" class="login-form">
+          <label>
+            Contrasena
+            <input type="password" name="password" required autocomplete="current-password" />
+          </label>
+          <button type="submit" class="btn-primary">Entrar</button>
+          <p class="form-error" id="loginError" hidden></p>
+        </form>
+      </div>
+
+      <div id="dashboard" class="dashboard" hidden>
+        <div class="stat-row" id="statRow"></div>
+
+        <nav class="subtabs" role="tablist">
+          <button class="subtab-btn active" data-subtab="today">Hoy</button>
+          <button class="subtab-btn" data-subtab="upcoming">Proximas</button>
+          <button class="subtab-btn" data-subtab="services">Servicios</button>
+          <button class="subtab-btn" data-subtab="hours">Horario</button>
+          <button class="subtab-btn" data-subtab="settings">Ajustes</button>
+          <button class="subtab-btn logout" id="logoutBtn">Salir</button>
+        </nav>
+
+        <section class="subview" data-subview="today"></section>
+        <section class="subview" data-subview="upcoming" hidden></section>
+        <section class="subview" data-subview="services" hidden></section>
+        <section class="subview" data-subview="hours" hidden></section>
+        <section class="subview" data-subview="settings" hidden></section>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
