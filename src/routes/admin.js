@@ -5,6 +5,7 @@ const { requireAdmin } = require("../auth");
 const { asyncHandler } = require("../asyncHandler");
 const { computeSlotsForDate } = require("../scheduling");
 const { toMinutes } = require("../availability");
+const { classifyClient } = require("../clientClassification");
 
 const APPOINTMENT_STATUSES = ["pending", "confirmed", "done", "cancelled", "no_show"];
 
@@ -358,6 +359,19 @@ function isoDateJS(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function toCsvValue(v) {
+  if (v == null) return "";
+  const s = String(v);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function toCsv(rows, columns) {
+  const header = columns.map((c) => toCsvValue(c.label)).join(",");
+  const body = rows.map((r) => columns.map((c) => toCsvValue(r[c.key])).join(",")).join("\n");
+  return `${header}\n${body}`;
+}
+
 router.get(
   "/dashboard-stats",
   asyncHandler(async (req, res) => {
@@ -460,6 +474,165 @@ router.get(
     ];
     events.sort((a, b) => new Date(b.at) - new Date(a.at));
     res.json(events.slice(0, 8));
+  })
+);
+
+// ---- CRM de clientes ---------------------------------------------------
+
+async function getClientsWithStats() {
+  const clients = await db.prepare("SELECT * FROM clients ORDER BY name ASC").all();
+  const appts = await db
+    .prepare("SELECT client_id, date, time, status, price FROM appointments WHERE client_id IS NOT NULL")
+    .all();
+  const today = isoDateJS(new Date());
+
+  const byClient = {};
+  appts.forEach((a) => {
+    (byClient[a.client_id] = byClient[a.client_id] || []).push(a);
+  });
+
+  return clients.map((c) => {
+    const list = byClient[c.id] || [];
+    const active = list.filter((a) => a.status !== "cancelled");
+    const completed = list.filter((a) => a.status === "done");
+    const totalSpent = completed.reduce((sum, a) => sum + a.price, 0);
+    const lastVisit = completed.length ? completed.map((a) => a.date).sort().slice(-1)[0] : null;
+    const upcoming = active
+      .filter((a) => a.date >= today && (a.status === "confirmed" || a.status === "pending"))
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
+
+    const classification = classifyClient({
+      totalCount: active.length,
+      completedCount: completed.length,
+      totalSpent,
+      lastVisitDate: lastVisit,
+      hasUpcoming: !!upcoming,
+      today,
+    });
+
+    return {
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      notes: c.notes,
+      createdAt: c.created_at,
+      appointmentCount: active.length,
+      lastVisit,
+      nextAppointment: upcoming ? `${upcoming.date} ${upcoming.time}` : null,
+      totalSpent,
+      classification,
+    };
+  });
+}
+
+router.get(
+  "/clients",
+  asyncHandler(async (req, res) => {
+    const { search, filter } = req.query;
+    let result = await getClientsWithStats();
+    if (search) {
+      const q = String(search).toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.includes(q) ||
+          (c.email || "").toLowerCase().includes(q)
+      );
+    }
+    if (filter && filter !== "all") {
+      result = result.filter((c) => c.classification === filter);
+    }
+    res.json(result);
+  })
+);
+
+router.get(
+  "/clients/export.csv",
+  asyncHandler(async (req, res) => {
+    const clients = await getClientsWithStats();
+    const csv = toCsv(clients, [
+      { key: "name", label: "Nombre" },
+      { key: "phone", label: "Telefono" },
+      { key: "email", label: "Correo" },
+      { key: "appointmentCount", label: "Citas" },
+      { key: "lastVisit", label: "Ultima visita" },
+      { key: "nextAppointment", label: "Proxima cita" },
+      { key: "totalSpent", label: "Gastado" },
+      { key: "classification", label: "Clasificacion" },
+    ]);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=clientes.csv");
+    res.send(csv);
+  })
+);
+
+router.get(
+  "/appointments/export.csv",
+  asyncHandler(async (req, res) => {
+    const rows = await db.prepare("SELECT * FROM appointments ORDER BY date DESC, time DESC").all();
+    const csv = toCsv(rows, [
+      { key: "id", label: "ID" },
+      { key: "date", label: "Fecha" },
+      { key: "time", label: "Hora" },
+      { key: "client_name", label: "Cliente" },
+      { key: "client_phone", label: "Telefono" },
+      { key: "service_name", label: "Servicio" },
+      { key: "duration_min", label: "Duracion (min)" },
+      { key: "price", label: "Precio" },
+      { key: "status", label: "Estado" },
+    ]);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=citas.csv");
+    res.send(csv);
+  })
+);
+
+router.get(
+  "/clients/:id",
+  asyncHandler(async (req, res) => {
+    const client = await db.prepare("SELECT * FROM clients WHERE id = ?").get(req.params.id);
+    if (!client) return res.status(404).json({ error: "No encontrado." });
+
+    const appointments = await db
+      .prepare("SELECT * FROM appointments WHERE client_id = ? ORDER BY date DESC, time DESC")
+      .all(req.params.id);
+    const completed = appointments.filter((a) => a.status === "done");
+    const cancelled = appointments.filter((a) => a.status === "cancelled");
+    const noShow = appointments.filter((a) => a.status === "no_show");
+    const totalSpent = completed.reduce((sum, a) => sum + a.price, 0);
+    const today = isoDateJS(new Date());
+    const upcoming = appointments
+      .filter((a) => a.date >= today && (a.status === "confirmed" || a.status === "pending"))
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
+    const lastVisit = completed.length ? completed.map((a) => a.date).sort().slice(-1)[0] : null;
+
+    res.json({
+      ...client,
+      appointments,
+      stats: {
+        totalAppointments: appointments.filter((a) => a.status !== "cancelled").length,
+        completed: completed.length,
+        cancelled: cancelled.length,
+        noShow: noShow.length,
+        totalSpent,
+        lastVisit,
+        nextAppointment: upcoming ? `${upcoming.date} ${upcoming.time}` : null,
+      },
+    });
+  })
+);
+
+router.patch(
+  "/clients/:id",
+  asyncHandler(async (req, res) => {
+    const { notes, email } = req.body || {};
+    const client = await db.prepare("SELECT * FROM clients WHERE id = ?").get(req.params.id);
+    if (!client) return res.status(404).json({ error: "No encontrado." });
+    await db
+      .prepare("UPDATE clients SET notes = COALESCE(?, notes), email = COALESCE(?, email) WHERE id = ?")
+      .run(notes != null ? notes : null, email != null ? email : null, req.params.id);
+    res.json(await db.prepare("SELECT * FROM clients WHERE id = ?").get(req.params.id));
   })
 );
 

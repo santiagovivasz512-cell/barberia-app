@@ -341,10 +341,10 @@
       await refreshStatRow();
       if (which === "inicio") await renderTodayView();
       if (which === "agenda") await renderCalendarView();
-      if (which === "clientes") renderClientesPlaceholder();
+      if (which === "clientes") await renderClientesView();
       if (which === "servicios") await renderServicesAdmin();
       if (which === "horarios") await renderHoursAdmin();
-      if (which === "estadisticas") renderEstadisticasPlaceholder();
+      if (which === "estadisticas") await renderMovimientosView();
       if (which === "configuracion") await renderSettingsAdmin();
     } catch (e) {
       if (e.status === 401) {
@@ -365,20 +365,151 @@
     `;
   }
 
-  function renderClientesPlaceholder() {
-    $('[data-subview="clientes"]').innerHTML = comingSoonPanel(
-      "👥",
-      "CRM de clientes",
-      "Aqui vas a poder ver el listado completo de clientes, su historial de citas, cuanto han gastado y notas internas del negocio."
-    );
+  const CLASS_LABELS = { nuevo: "Nuevo", frecuente: "Frecuente", vip: "VIP", inactivo: "Inactivo", regular: "Regular" };
+  const clientsState = { search: "", filter: "all" };
+
+  async function downloadCsv(path, filename) {
+    const token = localStorage.getItem("barberia_token");
+    try {
+      const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Error al exportar.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("No se pudo exportar el archivo.");
+    }
   }
 
-  function renderEstadisticasPlaceholder() {
-    $('[data-subview="estadisticas"]').innerHTML = comingSoonPanel(
-      "📊",
-      "Estadisticas del negocio",
-      "Aqui vas a ver graficas de citas, ingresos, servicios mas solicitados y horarios pico, calculadas con tus propios datos."
-    );
+  function clientRow(c) {
+    return `
+      <div class="client-row" data-view-client="${c.id}">
+        <div class="client-main">
+          <strong>${escapeHtml(c.name)}</strong>
+          <span class="client-badge badge-${c.classification}">${CLASS_LABELS[c.classification] || c.classification}</span>
+          <div class="client-sub">${escapeHtml(c.phone)}${c.email ? " · " + escapeHtml(c.email) : ""}</div>
+        </div>
+        <div class="client-stat"><span class="label">Citas</span><span class="value">${c.appointmentCount}</span></div>
+        <div class="client-stat"><span class="label">Ultima visita</span><span class="value">${c.lastVisit ? niceDate(c.lastVisit) : "—"}</span></div>
+        <div class="client-stat"><span class="label">Proxima cita</span><span class="value">${c.nextAppointment ? c.nextAppointment : "—"}</span></div>
+        <div class="client-stat"><span class="label">Gastado</span><span class="value">${money(c.totalSpent)}</span></div>
+      </div>
+    `;
+  }
+
+  async function renderClientesView() {
+    const view = $('[data-subview="clientes"]');
+    view.innerHTML = `
+      <h3 class="panel-section-title">Clientes</h3>
+      <div class="clients-toolbar">
+        <input type="search" id="clientSearch" placeholder="Buscar por nombre, telefono o correo..." value="${escapeHtml(clientsState.search)}" />
+        <div class="filter-chips" id="clientFilters">
+          <button class="chip ${clientsState.filter === "all" ? "active" : ""}" data-filter="all">Todos</button>
+          <button class="chip ${clientsState.filter === "nuevo" ? "active" : ""}" data-filter="nuevo">Nuevos</button>
+          <button class="chip ${clientsState.filter === "frecuente" ? "active" : ""}" data-filter="frecuente">Frecuentes</button>
+          <button class="chip ${clientsState.filter === "vip" ? "active" : ""}" data-filter="vip">VIP</button>
+          <button class="chip ${clientsState.filter === "inactivo" ? "active" : ""}" data-filter="inactivo">Inactivos</button>
+        </div>
+        <button class="btn-secondary" id="exportClientsBtn">Exportar CSV</button>
+      </div>
+      <div id="clientsList" class="clients-list"></div>
+    `;
+
+    $("#clientSearch").addEventListener("input", debounce((e) => {
+      clientsState.search = e.target.value;
+      loadClientsList();
+    }, 350));
+
+    $$("#clientFilters .chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        clientsState.filter = chip.dataset.filter;
+        $$("#clientFilters .chip").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+        loadClientsList();
+      });
+    });
+
+    $("#exportClientsBtn").addEventListener("click", () => downloadCsv("/api/admin/clients/export.csv", "clientes.csv"));
+
+    await loadClientsList();
+  }
+
+  async function loadClientsList() {
+    const params = new URLSearchParams();
+    if (clientsState.search) params.set("search", clientsState.search);
+    if (clientsState.filter !== "all") params.set("filter", clientsState.filter);
+    const clients = await api(`/api/admin/clients?${params.toString()}`);
+    const list = $("#clientsList");
+    if (!list) return;
+    list.innerHTML = clients.length
+      ? clients.map(clientRow).join("")
+      : `<p class="empty-note-block">No hay clientes que coincidan con la busqueda.</p>`;
+    list.querySelectorAll("[data-view-client]").forEach((row) => {
+      row.addEventListener("click", () => renderClientProfile(row.dataset.viewClient));
+    });
+  }
+
+  function clientHistoryRow(a) {
+    return `
+      <div class="apt-row status-${a.status}">
+        <div class="stripe"></div>
+        <div class="apt-time">${niceDate(a.date)}</div>
+        <div class="apt-main">
+          <div class="apt-client">${escapeHtml(a.service_name)} <span class="status-tag status-${a.status}">${statusLabel(a.status)}</span></div>
+          <div class="apt-detail">${a.time} · ${a.duration_min} min · ${money(a.price)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderClientProfile(id) {
+    const view = $('[data-subview="clientes"]');
+    view.innerHTML = `<p class="empty-note-block">Cargando ficha del cliente...</p>`;
+    const c = await api(`/api/admin/clients/${id}`);
+    const s = c.stats;
+    view.innerHTML = `
+      <button class="link-back" id="backToClients">&larr; Volver a clientes</button>
+      <h3 class="panel-section-title" style="margin-top:10px;">${escapeHtml(c.name)}</h3>
+      <p class="hint-text" style="margin-top:-6px;">${escapeHtml(c.phone)}${c.email ? " · " + escapeHtml(c.email) : ""} · Cliente desde ${niceDate(c.created_at.slice(0, 10))}</p>
+
+      <div class="stat-row client-profile-stats">
+        <div class="stat-tile"><div class="label">Total citas</div><div class="value">${s.totalAppointments}</div></div>
+        <div class="stat-tile"><div class="label">Completadas</div><div class="value">${s.completed}</div></div>
+        <div class="stat-tile"><div class="label">Canceladas</div><div class="value">${s.cancelled}</div></div>
+        <div class="stat-tile"><div class="label">No asistio</div><div class="value">${s.noShow}</div></div>
+        <div class="stat-tile"><div class="label">Gastado</div><div class="value">${money(s.totalSpent)}</div></div>
+        <div class="stat-tile"><div class="label">Ultima visita</div><div class="value value-sm">${s.lastVisit ? niceDate(s.lastVisit) : "—"}</div></div>
+        <div class="stat-tile"><div class="label">Proxima cita</div><div class="value value-sm">${s.nextAppointment || "—"}</div></div>
+      </div>
+
+      <h3 class="panel-section-title">Historial de citas</h3>
+      <div>
+        ${c.appointments.length ? c.appointments.map(clientHistoryRow).join("") : `<p class="empty-note-block">Sin citas registradas.</p>`}
+      </div>
+
+      <h3 class="panel-section-title">Notas internas</h3>
+      <p class="hint-text">Solo visibles para el negocio, el cliente nunca las ve.</p>
+      <form class="settings-form" id="clientNotesForm">
+        <textarea id="clientNotesInput" rows="4" placeholder="Ej: Prefiere degradado bajo. No usar maquina #0.">${escapeHtml(c.notes || "")}</textarea>
+        <button type="submit" class="btn-primary">Guardar notas</button>
+        <p class="save-note" id="notesSaveNote" hidden>Notas guardadas.</p>
+      </form>
+    `;
+
+    $("#backToClients").addEventListener("click", renderClientesView);
+    $("#clientNotesForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await api(`/api/admin/clients/${id}`, { method: "PATCH", body: JSON.stringify({ notes: $("#clientNotesInput").value }) });
+      const note = $("#notesSaveNote");
+      note.hidden = false;
+      setTimeout(() => { note.hidden = true; }, 2500);
+    });
   }
 
   async function refreshStatRow() {
@@ -534,13 +665,26 @@
 
   async function renderTodayView() {
     const today = isoDate(new Date());
-    const [rows, stats, activity] = await Promise.all([
-      api(`/api/admin/appointments?from=${today}&to=${today}`),
+    const rows = await api(`/api/admin/appointments?from=${today}&to=${today}`);
+    const view = $('[data-subview="inicio"]');
+    view.innerHTML = `
+      <h3 class="panel-section-title">Citas de hoy</h3>
+      <div id="todayApptList">
+        ${rows.length ? rows.map(appointmentRow).join("") : `<p class="empty-day">No hay citas agendadas para hoy.</p>`}
+      </div>
+    `;
+    bindAppointmentRows($("#todayApptList"), renderTodayView);
+  }
+
+  async function renderMovimientosView() {
+    const today = isoDate(new Date());
+    const [stats, activity] = await Promise.all([
       api(`/api/admin/dashboard-stats?date=${today}`),
       api(`/api/admin/activity?date=${today}`),
     ]);
-    const view = $('[data-subview="inicio"]');
+    const view = $('[data-subview="estadisticas"]');
     view.innerHTML = `
+      <h3 class="panel-section-title">Movimientos del negocio</h3>
       <div class="stat-row secondary-stats">
         <div class="stat-tile"><div class="label">Citas esta semana</div><div class="value">${stats.weekCount}</div></div>
         <div class="stat-tile"><div class="label">Clientes totales</div><div class="value">${stats.totalClients}</div></div>
@@ -552,17 +696,11 @@
         <div class="stat-tile"><div class="label">Servicio mas pedido</div><div class="value value-sm">${stats.topService ? escapeHtml(stats.topService.name) : "—"}</div></div>
       </div>
 
-      <h3 class="panel-section-title">Citas de hoy</h3>
-      <div id="todayApptList">
-        ${rows.length ? rows.map(appointmentRow).join("") : `<p class="empty-day">No hay citas agendadas para hoy.</p>`}
-      </div>
-
       <h3 class="panel-section-title">Actividad reciente</h3>
       <div class="activity-list">
         ${activity.length ? activity.map(activityRow).join("") : `<p class="empty-note-block">Sin actividad reciente todavia.</p>`}
       </div>
     `;
-    bindAppointmentRows($("#todayApptList"), renderTodayView);
   }
 
   function toMinutesLocal(hhmm) {
@@ -602,12 +740,14 @@
           <button class="cal-mode-btn ${calendarState.mode === "week" ? "active" : ""}" data-cal-mode="week">Semana</button>
           <button class="cal-mode-btn ${calendarState.mode === "day" ? "active" : ""}" data-cal-mode="day">Dia</button>
         </div>
+        <button class="btn-secondary" id="exportApptsBtn">Exportar CSV</button>
       </div>
       <div class="cal-grid-scroll"><div id="calGridWrap"></div></div>
     `;
     $("#calPrev").addEventListener("click", () => shiftCalendar(-1));
     $("#calNext").addEventListener("click", () => shiftCalendar(1));
     $("#calToday").addEventListener("click", () => { calendarState.anchor = new Date(); renderCalendarBody(); });
+    $("#exportApptsBtn").addEventListener("click", () => downloadCsv("/api/admin/appointments/export.csv", "citas.csv"));
     $$("[data-cal-mode]").forEach((btn) => {
       btn.addEventListener("click", () => {
         calendarState.mode = btn.dataset.calMode;
