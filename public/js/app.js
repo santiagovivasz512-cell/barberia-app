@@ -107,13 +107,28 @@
     });
   }
 
+  const SCISSORS_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M20.5 4.5 8 15.5M9.5 12.5l11 6"/></svg>`;
+
+  function bookingContextHtml() {
+    const parts = [];
+    if (booking.service) {
+      parts.push(`<strong>${escapeHtml(booking.service.name)}</strong>`);
+      parts.push(`<span>${booking.service.duration} min</span>`);
+      parts.push(`<span class="price num">${money(booking.service.price)}</span>`);
+    }
+    if (booking.date) parts.push(`<span>${niceDate(booking.date)}</span>`);
+    if (booking.time) parts.push(`<span class="num">${to12h(booking.time)}</span>`);
+    return parts.join(`<span class="sep">·</span>`);
+  }
+
   async function loadServices() {
-    const services = await api("/api/services");
     const list = $("#serviceList");
+    list.innerHTML = `<p class="empty-note">Cargando servicios...</p>`;
+    const services = await api("/api/services");
     list.innerHTML = services.map((s) => `
       <button class="service-card" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-duration="${s.duration_min}" data-price="${s.price}">
-        <span class="svc-name">${escapeHtml(s.name)}</span>
-        <span class="svc-meta"><span>${s.duration_min} min</span><span class="svc-price">${money(s.price)}</span></span>
+        <span class="svc-name">${SCISSORS_ICON}${escapeHtml(s.name)}</span>
+        <span class="svc-meta"><span>${s.duration_min} min</span><span class="svc-price num">${money(s.price)}</span></span>
       </button>
     `).join("") || `<p class="empty-note">Aun no hay servicios configurados.</p>`;
 
@@ -123,7 +138,7 @@
           id: card.dataset.id, name: card.dataset.name,
           duration: Number(card.dataset.duration), price: Number(card.dataset.price),
         };
-        $("#chosenServiceLine").textContent = `${booking.service.name} · ${booking.service.duration} min · ${money(booking.service.price)}`;
+        $("#chosenServiceLine").innerHTML = bookingContextHtml();
         buildDateStrip();
         goToStep(2);
       });
@@ -149,7 +164,7 @@
         strip.querySelectorAll(".date-chip").forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
         booking.date = chip.dataset.date;
-        $("#chosenDateLine").textContent = niceDate(booking.date);
+        $("#chosenDateLine").innerHTML = bookingContextHtml();
         await loadSlots();
         goToStep(3);
       });
@@ -199,7 +214,7 @@
           list.querySelectorAll(".slot-btn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           booking.time = btn.dataset.time;
-          $("#chosenTimeLine").textContent = `${niceDate(booking.date)} · ${to12h(booking.time)}`;
+          $("#chosenTimeLine").innerHTML = bookingContextHtml();
           goToStep(4);
         });
       });
@@ -251,9 +266,9 @@
       <dl>
         <dt>Servicio</dt><dd>${escapeHtml(apt.service_name)}</dd>
         <dt>Fecha</dt><dd>${niceDate(apt.date)}</dd>
-        <dt>Hora</dt><dd>${to12h(apt.time)}</dd>
+        <dt>Hora</dt><dd class="num">${to12h(apt.time)}</dd>
         <dt>Nombre</dt><dd>${escapeHtml(apt.client_name)}</dd>
-        <dt>Valor</dt><dd>${money(apt.price)}</dd>
+        <dt>Valor</dt><dd class="price num">${money(apt.price)}</dd>
       </dl>
     `;
     renderMyBookings();
@@ -263,6 +278,7 @@
     const mine = JSON.parse(localStorage.getItem("barberia_my_bookings") || "[]");
     const box = $("#myBookingsList");
     if (!mine.length) { box.innerHTML = `<p class="empty-note">Todavia no tienes reservas guardadas en este dispositivo.</p>`; return; }
+    box.innerHTML = `<p class="empty-note">Cargando tus reservas...</p>`;
     const rows = await Promise.all(mine.map(async (m) => {
       try {
         const apt = await api(`/api/appointments/${m.token}`);
@@ -436,10 +452,10 @@
           <span class="client-badge badge-${c.classification}">${CLASS_LABELS[c.classification] || c.classification}</span>
           <div class="client-sub">${escapeHtml(c.phone)}${c.email ? " · " + escapeHtml(c.email) : ""}</div>
         </div>
-        <div class="client-stat"><span class="label">Citas</span><span class="value">${c.appointmentCount}</span></div>
-        <div class="client-stat"><span class="label">Ultima visita</span><span class="value">${c.lastVisit ? niceDate(c.lastVisit) : "—"}</span></div>
-        <div class="client-stat"><span class="label">Proxima cita</span><span class="value">${c.nextAppointment ? niceDateTime(c.nextAppointment) : "—"}</span></div>
-        <div class="client-stat"><span class="label">Gastado</span><span class="value">${money(c.totalSpent)}</span></div>
+        <div class="client-stat"><span class="label">Citas</span><span class="value num">${c.appointmentCount}</span></div>
+        <div class="client-stat"><span class="label">Ultima visita</span><span class="value num">${c.lastVisit ? niceDate(c.lastVisit) : "—"}</span></div>
+        <div class="client-stat"><span class="label">Proxima cita</span><span class="value num">${c.nextAppointment ? niceDateTime(c.nextAppointment) : "—"}</span></div>
+        <div class="client-stat"><span class="label">Gastado</span><span class="value num">${money(c.totalSpent)}</span></div>
       </div>
     `;
   }
@@ -485,6 +501,8 @@
     const params = new URLSearchParams();
     if (clientsState.search) params.set("search", clientsState.search);
     if (clientsState.filter !== "all") params.set("filter", clientsState.filter);
+    const listEl = $("#clientsList");
+    if (listEl) listEl.innerHTML = `<p class="empty-note-block">Cargando clientes...</p>`;
     const clients = await api(`/api/admin/clients?${params.toString()}`);
     const list = $("#clientsList");
     if (!list) return;
@@ -503,7 +521,7 @@
         <div class="apt-time">${niceDate(a.date)}</div>
         <div class="apt-main">
           <div class="apt-client">${escapeHtml(a.service_name)} <span class="status-tag status-${a.status}">${statusLabel(a.status)}</span></div>
-          <div class="apt-detail">${to12h(a.time)} · ${a.duration_min} min · ${money(a.price)}</div>
+          <div class="apt-detail"><span class="num">${to12h(a.time)}</span> · ${a.duration_min} min · <span class="num">${money(a.price)}</span></div>
         </div>
       </div>
     `;
@@ -555,11 +573,25 @@
 
   async function refreshStatRow() {
     const today = isoDate(new Date());
+    $("#statRow").innerHTML = `<div class="today-hero"><div class="today-hero-main"><span class="label">Cargando...</span></div></div>`;
     const summary = await api(`/api/admin/summary?date=${today}`);
     $("#statRow").innerHTML = `
-      <div class="stat-tile"><div class="label">Citas hoy</div><div class="value">${summary.count}</div></div>
-      <div class="stat-tile"><div class="label">Ingresos estimados hoy</div><div class="value">${money(summary.revenue)}</div></div>
-      <div class="stat-tile"><div class="label">Proxima cita</div><div class="value">${summary.next ? to12h(summary.next.time) : "—"}</div></div>
+      <div class="today-hero">
+        <div class="today-hero-main">
+          <span class="label">Ingresos estimados hoy</span>
+          <span class="value num">${money(summary.revenue)}</span>
+        </div>
+        <div class="today-hero-secondary">
+          <div class="today-hero-stat">
+            <span class="label">Citas hoy</span>
+            <span class="value num">${summary.count}</span>
+          </div>
+          <div class="today-hero-stat">
+            <span class="label">Proxima cita</span>
+            <span class="value num">${summary.next ? to12h(summary.next.time) : "—"}</span>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -580,10 +612,10 @@
     return `
       <div class="apt-row status-${apt.status}">
         <div class="stripe"></div>
-        <div class="apt-time">${to12h(apt.time)}</div>
+        <div class="apt-time num">${to12h(apt.time)}</div>
         <div class="apt-main">
           <div class="apt-client">${escapeHtml(apt.client_name)} <span class="status-tag status-${apt.status}">${statusLabel(apt.status)}</span></div>
-          <div class="apt-detail">${escapeHtml(apt.service_name)} · ${apt.duration_min} min · ${money(apt.price)} · ${escapeHtml(apt.client_phone)}</div>
+          <div class="apt-detail">${escapeHtml(apt.service_name)} · ${apt.duration_min} min · <span class="num">${money(apt.price)}</span> · ${escapeHtml(apt.client_phone)}</div>
         </div>
         <div class="apt-actions">
           ${actions.map((a) => `<button class="pill-btn ${a.cls}" data-status="${a.status}" data-id="${apt.id}">${a.label}</button>`).join("")}
@@ -706,8 +738,9 @@
 
   async function renderTodayView() {
     const today = isoDate(new Date());
-    const rows = await api(`/api/admin/appointments?from=${today}&to=${today}`);
     const view = $('[data-subview="inicio"]');
+    view.innerHTML = `<h3 class="panel-section-title">Citas de hoy</h3><p class="empty-note-block">Cargando citas...</p>`;
+    const rows = await api(`/api/admin/appointments?from=${today}&to=${today}`);
     view.innerHTML = `
       <h3 class="panel-section-title">Citas de hoy</h3>
       <div id="todayApptList">
@@ -719,21 +752,22 @@
 
   async function renderMovimientosView() {
     const today = isoDate(new Date());
+    const view = $('[data-subview="estadisticas"]');
+    view.innerHTML = `<h3 class="panel-section-title">Movimientos del negocio</h3><p class="empty-note-block">Cargando estadisticas...</p>`;
     const [stats, activity] = await Promise.all([
       api(`/api/admin/dashboard-stats?date=${today}`),
       api(`/api/admin/activity?date=${today}`),
     ]);
-    const view = $('[data-subview="estadisticas"]');
     view.innerHTML = `
       <h3 class="panel-section-title">Movimientos del negocio</h3>
       <div class="stat-row secondary-stats">
-        <div class="stat-tile"><div class="label">Citas esta semana</div><div class="value">${stats.weekCount}</div></div>
-        <div class="stat-tile"><div class="label">Clientes totales</div><div class="value">${stats.totalClients}</div></div>
-        <div class="stat-tile"><div class="label">Clientes nuevos (mes)</div><div class="value">${stats.newClientsThisMonth}</div></div>
-        <div class="stat-tile"><div class="label">Completadas (mes)</div><div class="value">${stats.completedThisMonth}</div></div>
-        <div class="stat-tile"><div class="label">Canceladas (mes)</div><div class="value">${stats.cancelledThisMonth}</div></div>
-        <div class="stat-tile"><div class="label">No asistio (mes)</div><div class="value">${stats.noShowThisMonth}</div></div>
-        <div class="stat-tile"><div class="label">Ocupacion (semana)</div><div class="value">${stats.occupancyPercent}%</div></div>
+        <div class="stat-tile"><div class="label">Citas esta semana</div><div class="value num">${stats.weekCount}</div></div>
+        <div class="stat-tile"><div class="label">Clientes totales</div><div class="value num">${stats.totalClients}</div></div>
+        <div class="stat-tile"><div class="label">Clientes nuevos (mes)</div><div class="value num">${stats.newClientsThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">Completadas (mes)</div><div class="value num">${stats.completedThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">Canceladas (mes)</div><div class="value num">${stats.cancelledThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">No asistio (mes)</div><div class="value num">${stats.noShowThisMonth}</div></div>
+        <div class="stat-tile"><div class="label">Ocupacion (semana)</div><div class="value num">${stats.occupancyPercent}%</div></div>
         <div class="stat-tile"><div class="label">Servicio mas pedido</div><div class="value value-sm">${stats.topService ? escapeHtml(stats.topService.name) : "—"}</div></div>
       </div>
 
@@ -874,9 +908,11 @@
   }
 
   async function renderServicesAdmin() {
-    const services = await api("/api/admin/services");
     const view = $('[data-subview="servicios"]');
+    view.innerHTML = `<h3 class="panel-section-title">Servicios</h3><p class="empty-note-block">Cargando servicios...</p>`;
+    const services = await api("/api/admin/services");
     view.innerHTML = `
+      <h3 class="panel-section-title">Servicios</h3>
       <div class="service-admin-list">
         ${services.map((s) => `
           <div class="service-admin-row" data-id="${s.id}">
@@ -928,8 +964,9 @@
   const DOW_NAMES = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
   async function renderHoursAdmin() {
-    const hours = await api("/api/admin/hours");
     const view = $('[data-subview="horarios"]');
+    view.innerHTML = `<h3 class="panel-section-title">Horario semanal</h3><p class="empty-note-block">Cargando horario...</p>`;
+    const hours = await api("/api/admin/hours");
     view.innerHTML = `
       <h3 class="panel-section-title">Horario semanal</h3>
       <div class="hours-grid">
@@ -953,7 +990,7 @@
 
       <h3 class="panel-section-title">Bloqueos manuales</h3>
       <p class="hint-text">Bloquea espacios puntuales (almuerzo, cita personal, dia no disponible). Los clientes no podran reservar sobre estos horarios.</p>
-      <div id="timeBlocksList" class="time-blocks-list"></div>
+      <div id="timeBlocksList" class="time-blocks-list"><p class="empty-note-block">Cargando bloqueos...</p></div>
       <form class="service-form" id="newBlockForm">
         <label>Fecha <input type="date" name="date" required /></label>
         <label class="closed-toggle" style="align-self:center;"><input type="checkbox" name="allDay" id="blockAllDay" /> Todo el dia</label>
@@ -1043,8 +1080,9 @@
   }
 
   async function renderSettingsAdmin() {
-    const settings = await api("/api/admin/settings");
     const view = $('[data-subview="configuracion"]');
+    view.innerHTML = `<p class="empty-note-block">Cargando configuracion...</p>`;
+    const settings = await api("/api/admin/settings");
     view.innerHTML = `
       <form class="settings-form" id="shopSettingsForm">
         <h3>Datos del negocio</h3>
@@ -1171,7 +1209,7 @@
         .map((h) => `
           <li class="${h.day_of_week === todayDow ? "is-today" : ""}">
             <span class="dow">${DOW_NAMES[h.day_of_week]}</span>
-            <span class="hrs">${h.closed ? "Cerrado" : `${to12h(h.open_time)} - ${to12h(h.close_time)}`}</span>
+            <span class="hrs num">${h.closed ? "Cerrado" : `${to12h(h.open_time)} - ${to12h(h.close_time)}`}</span>
           </li>
         `)
         .join("");

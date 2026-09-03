@@ -6,7 +6,7 @@
 <title>Agenda de la barberia</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
@@ -30,10 +30,10 @@
       <div class="booking-layout">
       <section class="stepper-shell">
         <ol class="steps" id="stepIndicator">
-          <li data-step="1" class="active"><span>1</span>Servicio</li>
-          <li data-step="2"><span>2</span>Fecha</li>
-          <li data-step="3"><span>3</span>Hora</li>
-          <li data-step="4"><span>4</span>Tus datos</li>
+          <li data-step="1" class="active"><span>1</span><span class="step-label">Servicio</span></li>
+          <li data-step="2"><span>2</span><span class="step-label">Fecha</span></li>
+          <li data-step="3"><span>3</span><span class="step-label">Hora</span></li>
+          <li data-step="4"><span>4</span><span class="step-label">Tus datos</span></li>
         </ol>
 
         <div class="ticket">
@@ -82,6 +82,9 @@
                 <h2>Reserva confirmada</h2>
               </div>
               <div class="stub" id="confirmStub"></div>
+              <div class="etch-divider" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><path d="M20.5 4.5 8 15.5M9.5 12.5l11 6"/></svg>
+              </div>
               <button class="btn-secondary" id="bookAnotherBtn">Reservar otra cita</button>
             </div>
 
