@@ -35,7 +35,7 @@ html, body {
   min-height: 100%;
   background:
     linear-gradient(180deg, rgba(5, 4, 2, 0.6), rgba(5, 4, 2, 0.92)),
-    var(--bg) url("/img/hero-bg.jpg") center / cover no-repeat fixed;
+    var(--bg) url("/img/hero-bg.webp") center / cover no-repeat fixed;
   color: var(--ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
