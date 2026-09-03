@@ -297,6 +297,10 @@ router.get(
       email: await getSetting("email", ""),
       address: await getSetting("address", ""),
       instagram: await getSetting("instagram", ""),
+      logoUrl: await getSetting("logo_url", ""),
+      colorPrimary: await getSetting("color_primary", "#d9a441"),
+      colorSecondary: await getSetting("color_secondary", "#f2c14e"),
+      cancellationPolicy: await getSetting("cancellation_policy", ""),
     });
   })
 );
@@ -307,6 +311,7 @@ router.put(
     const {
       shopName, barberName, currency, locale, slotIntervalMin, minNoticeMin,
       description, phone, email, address, instagram,
+      logoUrl, colorPrimary, colorSecondary, cancellationPolicy,
     } = req.body || {};
     if (shopName != null) await setSetting("shop_name", String(shopName).trim());
     if (barberName != null) await setSetting("barber_name", String(barberName).trim());
@@ -319,6 +324,10 @@ router.put(
     if (email != null) await setSetting("email", String(email).trim());
     if (address != null) await setSetting("address", String(address).trim());
     if (instagram != null) await setSetting("instagram", String(instagram).trim().replace(/^@/, ""));
+    if (logoUrl != null) await setSetting("logo_url", String(logoUrl).trim());
+    if (colorPrimary != null) await setSetting("color_primary", String(colorPrimary).trim());
+    if (colorSecondary != null) await setSetting("color_secondary", String(colorSecondary).trim());
+    if (cancellationPolicy != null) await setSetting("cancellation_policy", String(cancellationPolicy).trim());
     res.json({ ok: true });
   })
 );

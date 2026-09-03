@@ -2,15 +2,15 @@
    Tokens
 --------------------------------------------------------------------- */
 :root {
-  --bg: #0b0906;
-  --surface: rgba(22, 17, 11, 0.86);
-  --surface-2: rgba(40, 31, 18, 0.78);
-  --ink: #f5ecd9;
-  --muted: #c9b795;
-  --line: rgba(217, 164, 65, 0.35);
-  --accent: #d9a441;
-  --accent-strong: #f2c14e;
-  --accent-ink: #1a1408;
+  --bg: #0a0a0b;
+  --surface: rgba(20, 20, 22, 0.86);
+  --surface-2: rgba(34, 35, 38, 0.78);
+  --ink: #eceef0;
+  --muted: #a4a9b1;
+  --line: rgba(200, 205, 213, 0.22);
+  --accent: #b6bcc6;
+  --accent-strong: #e7e9ec;
+  --accent-ink: #17181a;
   --status-pending: #e0b34d;
   --status-pending-bg: rgba(224, 179, 77, 0.18);
   --status-confirmed: #6fa8d8;
@@ -34,7 +34,7 @@ html, body {
   margin: 0;
   min-height: 100%;
   background:
-    linear-gradient(180deg, rgba(5, 4, 2, 0.6), rgba(5, 4, 2, 0.92)),
+    linear-gradient(180deg, rgba(6, 6, 7, 0.6), rgba(6, 6, 7, 0.92)),
     var(--bg) url("/img/hero-bg.webp") center / cover no-repeat fixed;
   color: var(--ink);
   font-family: var(--font-body);
