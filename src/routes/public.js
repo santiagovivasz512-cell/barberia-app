@@ -20,6 +20,7 @@ async function publicSettings() {
     email: await getSetting("email", ""),
     address: await getSetting("address", ""),
     instagram: await getSetting("instagram", ""),
+    facebook: await getSetting("facebook", ""),
     colorPrimary: await getSetting("color_primary", "#d9a441"),
     colorSecondary: await getSetting("color_secondary", "#f2c14e"),
     cancellationPolicy: await getSetting("cancellation_policy", ""),

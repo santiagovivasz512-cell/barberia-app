@@ -1093,6 +1093,7 @@
         <label>Correo <input type="email" name="email" value="${escapeHtml(settings.email || "")}" placeholder="Ej: contacto@mibarberia.com" /></label>
         <label>Direccion <input type="text" name="address" value="${escapeHtml(settings.address || "")}" placeholder="Ej: Calle 10 #5-20, Bogota" /></label>
         <label>Instagram (usuario, sin @) <input type="text" name="instagram" value="${escapeHtml(settings.instagram || "")}" placeholder="Ej: mibarberia" /></label>
+        <label>Facebook (usuario, sin @) <input type="text" name="facebook" value="${escapeHtml(settings.facebook || "")}" placeholder="Ej: mibarberia" /></label>
         <label>Minutos de anticipacion minima para reservar <input type="number" name="minNoticeMin" value="${settings.minNoticeMin}" min="0" step="5" /></label>
         <label>Intervalo entre horarios disponibles (min) <input type="number" name="slotIntervalMin" value="${settings.slotIntervalMin}" min="5" step="5" /></label>
         <button type="submit" class="btn-primary">Guardar cambios</button>
@@ -1116,7 +1117,7 @@
         shopName: fd.get("shopName"), barberName: fd.get("barberName"),
         minNoticeMin: fd.get("minNoticeMin"), slotIntervalMin: fd.get("slotIntervalMin"),
         description: fd.get("description"), phone: fd.get("phone"), email: fd.get("email"),
-        address: fd.get("address"), instagram: fd.get("instagram"),
+        address: fd.get("address"), instagram: fd.get("instagram"), facebook: fd.get("facebook"),
       }) });
       await loadPublicSettings();
       const note = $("#settingsSaveNote");
@@ -1189,6 +1190,7 @@
     if (SETTINGS.address) contactItems.push(`<li>📍 ${escapeHtml(SETTINGS.address)}</li>`);
     if (SETTINGS.phone) contactItems.push(`<li>📞 ${escapeHtml(SETTINGS.phone)}</li>`);
     if (SETTINGS.instagram) contactItems.push(`<li>📷 <a href="https://instagram.com/${encodeURIComponent(SETTINGS.instagram)}" target="_blank" rel="noopener">@${escapeHtml(SETTINGS.instagram)}</a></li>`);
+    if (SETTINGS.facebook) contactItems.push(`<li>📘 <a href="https://facebook.com/${encodeURIComponent(SETTINGS.facebook)}" target="_blank" rel="noopener">${escapeHtml(SETTINGS.facebook)}</a></li>`);
     if (contactItems.length) {
       contactList.innerHTML = contactItems.join("");
       $("#sidebarContactSection").hidden = false;

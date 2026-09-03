@@ -297,6 +297,7 @@ router.get(
       email: await getSetting("email", ""),
       address: await getSetting("address", ""),
       instagram: await getSetting("instagram", ""),
+      facebook: await getSetting("facebook", ""),
       logoUrl: await getSetting("logo_url", ""),
       colorPrimary: await getSetting("color_primary", "#d9a441"),
       colorSecondary: await getSetting("color_secondary", "#f2c14e"),
@@ -310,7 +311,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const {
       shopName, barberName, currency, locale, slotIntervalMin, minNoticeMin,
-      description, phone, email, address, instagram,
+      description, phone, email, address, instagram, facebook,
       logoUrl, colorPrimary, colorSecondary, cancellationPolicy,
     } = req.body || {};
     if (shopName != null) await setSetting("shop_name", String(shopName).trim());
@@ -324,6 +325,7 @@ router.put(
     if (email != null) await setSetting("email", String(email).trim());
     if (address != null) await setSetting("address", String(address).trim());
     if (instagram != null) await setSetting("instagram", String(instagram).trim().replace(/^@/, ""));
+    if (facebook != null) await setSetting("facebook", String(facebook).trim().replace(/^@/, ""));
     if (logoUrl != null) await setSetting("logo_url", String(logoUrl).trim());
     if (colorPrimary != null) await setSetting("color_primary", String(colorPrimary).trim());
     if (colorSecondary != null) await setSetting("color_secondary", String(colorSecondary).trim());

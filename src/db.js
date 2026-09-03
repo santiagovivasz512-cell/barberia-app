@@ -161,6 +161,7 @@ async function ensureNewSettingDefaults() {
     email: "",
     address: "",
     instagram: "",
+    facebook: "",
     color_primary: "#d9a441",
     color_secondary: "#f2c14e",
     cancellation_policy: "",
