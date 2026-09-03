@@ -292,6 +292,11 @@ router.get(
       locale: await getSetting("locale", "es-CO"),
       slotIntervalMin: Number(await getSetting("slot_interval_min", "15")),
       minNoticeMin: Number(await getSetting("min_notice_min", "30")),
+      description: await getSetting("description", ""),
+      phone: await getSetting("phone", ""),
+      email: await getSetting("email", ""),
+      address: await getSetting("address", ""),
+      instagram: await getSetting("instagram", ""),
     });
   })
 );
@@ -299,13 +304,21 @@ router.get(
 router.put(
   "/settings",
   asyncHandler(async (req, res) => {
-    const { shopName, barberName, currency, locale, slotIntervalMin, minNoticeMin } = req.body || {};
+    const {
+      shopName, barberName, currency, locale, slotIntervalMin, minNoticeMin,
+      description, phone, email, address, instagram,
+    } = req.body || {};
     if (shopName != null) await setSetting("shop_name", String(shopName).trim());
     if (barberName != null) await setSetting("barber_name", String(barberName).trim());
     if (currency != null) await setSetting("currency", String(currency).trim());
     if (locale != null) await setSetting("locale", String(locale).trim());
     if (slotIntervalMin != null) await setSetting("slot_interval_min", Number(slotIntervalMin));
     if (minNoticeMin != null) await setSetting("min_notice_min", Number(minNoticeMin));
+    if (description != null) await setSetting("description", String(description).trim());
+    if (phone != null) await setSetting("phone", String(phone).trim());
+    if (email != null) await setSetting("email", String(email).trim());
+    if (address != null) await setSetting("address", String(address).trim());
+    if (instagram != null) await setSetting("instagram", String(instagram).trim().replace(/^@/, ""));
     res.json({ ok: true });
   })
 );

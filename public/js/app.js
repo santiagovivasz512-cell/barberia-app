@@ -41,6 +41,19 @@
     return new Date(y, m - 1, d).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" });
   }
 
+  // Colombia usa formato de 12 horas (a. m. / p. m.), no 24h.
+  function to12h(hhmm) {
+    if (!hhmm) return hhmm;
+    const [h, m] = hhmm.split(":").map(Number);
+    return new Date(2000, 0, 1, h, m).toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit", hour12: true });
+  }
+
+  function niceDateTime(dateTimeStr) {
+    if (!dateTimeStr) return dateTimeStr;
+    const [date, time] = dateTimeStr.split(" ");
+    return `${niceDate(date)} · ${to12h(time)}`;
+  }
+
   async function api(path, opts = {}) {
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
     const token = localStorage.getItem("barberia_token");
@@ -143,6 +156,15 @@
     });
   }
 
+  function slotMinutes(hhmm) {
+    const [h, m] = hhmm.split(":").map(Number);
+    return h * 60 + m;
+  }
+
+  function slotButtonsHtml(times) {
+    return times.map((t) => `<button class="slot-btn" data-time="${t}">${to12h(t)}</button>`).join("");
+  }
+
   async function loadSlots() {
     const list = $("#slotList");
     list.innerHTML = `<p class="empty-note">Cargando horarios...</p>`;
@@ -152,13 +174,32 @@
         list.innerHTML = `<p class="empty-note">No hay horarios disponibles ese dia. Prueba con otra fecha.</p>`;
         return;
       }
-      list.innerHTML = res.slots.map((t) => `<button class="slot-btn" data-time="${t}">${t}</button>`).join("");
+      const morning = res.slots.filter((t) => slotMinutes(t) < 720);
+      const afternoon = res.slots.filter((t) => slotMinutes(t) >= 720);
+      let html = "";
+      if (morning.length) {
+        html += `
+          <div class="slot-group">
+            <h4 class="slot-group-title">Mañana</h4>
+            <div class="slot-grid">${slotButtonsHtml(morning)}</div>
+          </div>
+        `;
+      }
+      if (afternoon.length) {
+        html += `
+          <div class="slot-group">
+            <h4 class="slot-group-title">Tarde</h4>
+            <div class="slot-grid">${slotButtonsHtml(afternoon)}</div>
+          </div>
+        `;
+      }
+      list.innerHTML = html;
       list.querySelectorAll(".slot-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
           list.querySelectorAll(".slot-btn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           booking.time = btn.dataset.time;
-          $("#chosenTimeLine").textContent = `${niceDate(booking.date)} · ${booking.time}`;
+          $("#chosenTimeLine").textContent = `${niceDate(booking.date)} · ${to12h(booking.time)}`;
           goToStep(4);
         });
       });
@@ -210,7 +251,7 @@
       <dl>
         <dt>Servicio</dt><dd>${escapeHtml(apt.service_name)}</dd>
         <dt>Fecha</dt><dd>${niceDate(apt.date)}</dd>
-        <dt>Hora</dt><dd>${apt.time}</dd>
+        <dt>Hora</dt><dd>${to12h(apt.time)}</dd>
         <dt>Nombre</dt><dd>${escapeHtml(apt.client_name)}</dd>
         <dt>Valor</dt><dd>${money(apt.price)}</dd>
       </dl>
@@ -232,7 +273,7 @@
       <div class="my-booking-row" data-token="${apt.public_token}">
         <div>
           <strong>N.&deg; ${String(apt.ticket_number).padStart(4, "0")} &middot; ${escapeHtml(apt.service_name)}</strong>
-          <div class="mb-info">${niceDate(apt.date)} · ${apt.time} · <span class="status-tag status-${apt.status}">${statusLabel(apt.status)}</span></div>
+          <div class="mb-info">${niceDate(apt.date)} · ${to12h(apt.time)} · <span class="status-tag status-${apt.status}">${statusLabel(apt.status)}</span></div>
         </div>
         ${apt.status === "confirmed" ? `<button class="btn-cancel" data-cancel="${apt.public_token}">Cancelar</button>` : ""}
       </div>
@@ -397,7 +438,7 @@
         </div>
         <div class="client-stat"><span class="label">Citas</span><span class="value">${c.appointmentCount}</span></div>
         <div class="client-stat"><span class="label">Ultima visita</span><span class="value">${c.lastVisit ? niceDate(c.lastVisit) : "—"}</span></div>
-        <div class="client-stat"><span class="label">Proxima cita</span><span class="value">${c.nextAppointment ? c.nextAppointment : "—"}</span></div>
+        <div class="client-stat"><span class="label">Proxima cita</span><span class="value">${c.nextAppointment ? niceDateTime(c.nextAppointment) : "—"}</span></div>
         <div class="client-stat"><span class="label">Gastado</span><span class="value">${money(c.totalSpent)}</span></div>
       </div>
     `;
@@ -462,7 +503,7 @@
         <div class="apt-time">${niceDate(a.date)}</div>
         <div class="apt-main">
           <div class="apt-client">${escapeHtml(a.service_name)} <span class="status-tag status-${a.status}">${statusLabel(a.status)}</span></div>
-          <div class="apt-detail">${a.time} · ${a.duration_min} min · ${money(a.price)}</div>
+          <div class="apt-detail">${to12h(a.time)} · ${a.duration_min} min · ${money(a.price)}</div>
         </div>
       </div>
     `;
@@ -485,7 +526,7 @@
         <div class="stat-tile"><div class="label">No asistio</div><div class="value">${s.noShow}</div></div>
         <div class="stat-tile"><div class="label">Gastado</div><div class="value">${money(s.totalSpent)}</div></div>
         <div class="stat-tile"><div class="label">Ultima visita</div><div class="value value-sm">${s.lastVisit ? niceDate(s.lastVisit) : "—"}</div></div>
-        <div class="stat-tile"><div class="label">Proxima cita</div><div class="value value-sm">${s.nextAppointment || "—"}</div></div>
+        <div class="stat-tile"><div class="label">Proxima cita</div><div class="value value-sm">${s.nextAppointment ? niceDateTime(s.nextAppointment) : "—"}</div></div>
       </div>
 
       <h3 class="panel-section-title">Historial de citas</h3>
@@ -518,7 +559,7 @@
     $("#statRow").innerHTML = `
       <div class="stat-tile"><div class="label">Citas hoy</div><div class="value">${summary.count}</div></div>
       <div class="stat-tile"><div class="label">Ingresos estimados hoy</div><div class="value">${money(summary.revenue)}</div></div>
-      <div class="stat-tile"><div class="label">Proxima cita</div><div class="value">${summary.next ? summary.next.time : "—"}</div></div>
+      <div class="stat-tile"><div class="label">Proxima cita</div><div class="value">${summary.next ? to12h(summary.next.time) : "—"}</div></div>
     `;
   }
 
@@ -539,7 +580,7 @@
     return `
       <div class="apt-row status-${apt.status}">
         <div class="stripe"></div>
-        <div class="apt-time">${apt.time}</div>
+        <div class="apt-time">${to12h(apt.time)}</div>
         <div class="apt-main">
           <div class="apt-client">${escapeHtml(apt.client_name)} <span class="status-tag status-${apt.status}">${statusLabel(apt.status)}</span></div>
           <div class="apt-detail">${escapeHtml(apt.service_name)} · ${apt.duration_min} min · ${money(apt.price)} · ${escapeHtml(apt.client_phone)}</div>
@@ -578,7 +619,7 @@
         select.innerHTML = `<option value="">Sin horarios disponibles ese dia</option>`;
         return;
       }
-      select.innerHTML = `<option value="">Elige una hora</option>` + res.slots.map((t) => `<option value="${t}">${t}</option>`).join("");
+      select.innerHTML = `<option value="">Elige una hora</option>` + res.slots.map((t) => `<option value="${t}">${to12h(t)}</option>`).join("");
       select.addEventListener("change", () => { saveBtn.disabled = !select.value; }, { once: true });
     } catch (e) {
       select.innerHTML = `<option value="">No se pudo cargar</option>`;
@@ -1009,6 +1050,11 @@
         <h3>Datos del negocio</h3>
         <label>Nombre de la barberia <input type="text" name="shopName" value="${escapeHtml(settings.shopName)}" /></label>
         <label>Nombre del barbero <input type="text" name="barberName" value="${escapeHtml(settings.barberName)}" /></label>
+        <label>Descripcion corta (aparece en la pagina de reservas) <textarea name="description" rows="2" placeholder="Ej: Barberia de barrio, cortes clasicos y degradados.">${escapeHtml(settings.description || "")}</textarea></label>
+        <label>Telefono <input type="text" name="phone" value="${escapeHtml(settings.phone || "")}" placeholder="Ej: 3001234567" /></label>
+        <label>Correo <input type="email" name="email" value="${escapeHtml(settings.email || "")}" placeholder="Ej: contacto@mibarberia.com" /></label>
+        <label>Direccion <input type="text" name="address" value="${escapeHtml(settings.address || "")}" placeholder="Ej: Calle 10 #5-20, Bogota" /></label>
+        <label>Instagram (usuario, sin @) <input type="text" name="instagram" value="${escapeHtml(settings.instagram || "")}" placeholder="Ej: mibarberia" /></label>
         <label>Minutos de anticipacion minima para reservar <input type="number" name="minNoticeMin" value="${settings.minNoticeMin}" min="0" step="5" /></label>
         <label>Intervalo entre horarios disponibles (min) <input type="number" name="slotIntervalMin" value="${settings.slotIntervalMin}" min="5" step="5" /></label>
         <button type="submit" class="btn-primary">Guardar cambios</button>
@@ -1031,6 +1077,8 @@
       await api("/api/admin/settings", { method: "PUT", body: JSON.stringify({
         shopName: fd.get("shopName"), barberName: fd.get("barberName"),
         minNoticeMin: fd.get("minNoticeMin"), slotIntervalMin: fd.get("slotIntervalMin"),
+        description: fd.get("description"), phone: fd.get("phone"), email: fd.get("email"),
+        address: fd.get("address"), instagram: fd.get("instagram"),
       }) });
       await loadPublicSettings();
       const note = $("#settingsSaveNote");
@@ -1088,6 +1136,48 @@
         if (poleIcon) poleIcon.hidden = false;
       }
     }
+
+    $("#sidebarShopName").textContent = SETTINGS.shopName;
+    const descBox = $("#sidebarDescription");
+    if (SETTINGS.description) {
+      descBox.textContent = SETTINGS.description;
+      descBox.hidden = false;
+    } else {
+      descBox.hidden = true;
+    }
+
+    const contactList = $("#sidebarContactList");
+    const contactItems = [];
+    if (SETTINGS.address) contactItems.push(`<li>📍 ${escapeHtml(SETTINGS.address)}</li>`);
+    if (SETTINGS.phone) contactItems.push(`<li>📞 ${escapeHtml(SETTINGS.phone)}</li>`);
+    if (SETTINGS.instagram) contactItems.push(`<li>📷 <a href="https://instagram.com/${encodeURIComponent(SETTINGS.instagram)}" target="_blank" rel="noopener">@${escapeHtml(SETTINGS.instagram)}</a></li>`);
+    if (contactItems.length) {
+      contactList.innerHTML = contactItems.join("");
+      $("#sidebarContactSection").hidden = false;
+    } else {
+      $("#sidebarContactSection").hidden = true;
+    }
+  }
+
+  async function renderBookingHoursSidebar() {
+    const hoursBox = $("#sidebarHoursList");
+    if (!hoursBox) return;
+    try {
+      const hours = await api("/api/hours");
+      const todayDow = new Date().getDay();
+      hoursBox.innerHTML = hours
+        .slice()
+        .sort((a, b) => a.day_of_week - b.day_of_week)
+        .map((h) => `
+          <li class="${h.day_of_week === todayDow ? "is-today" : ""}">
+            <span class="dow">${DOW_NAMES[h.day_of_week]}</span>
+            <span class="hrs">${h.closed ? "Cerrado" : `${to12h(h.open_time)} - ${to12h(h.close_time)}`}</span>
+          </li>
+        `)
+        .join("");
+    } catch (e) {
+      hoursBox.innerHTML = "";
+    }
   }
 
   async function init() {
@@ -1097,6 +1187,7 @@
     initMyBookingsToggle();
     initLogin();
     await loadPublicSettings();
+    await renderBookingHoursSidebar();
     await loadServices();
   }
 

@@ -27,6 +27,7 @@
     </header>
 
     <main id="view-booking" class="view">
+      <div class="booking-layout">
       <section class="stepper-shell">
         <ol class="steps" id="stepIndicator">
           <li data-step="1" class="active"><span>1</span>Servicio</li>
@@ -53,7 +54,7 @@
             <div class="step-panel" data-step-panel="3" hidden>
               <h2>Elige la hora</h2>
               <div class="selected-service" id="chosenDateLine"></div>
-              <div id="slotList" class="slot-grid" aria-live="polite"></div>
+              <div id="slotList" class="slot-list-wrap" aria-live="polite"></div>
               <button class="link-back" data-back="2">&larr; Cambiar dia</button>
             </div>
 
@@ -87,6 +88,22 @@
           </div>
         </div>
       </section>
+
+      <aside class="booking-sidebar" id="bookingSidebar">
+        <div class="sidebar-card">
+          <h3 id="sidebarShopName">Mi Barberia</h3>
+          <p class="sidebar-desc" id="sidebarDescription" hidden></p>
+          <div class="sidebar-section" id="sidebarHoursSection">
+            <h4>Horario</h4>
+            <ul class="sidebar-hours-list" id="sidebarHoursList"></ul>
+          </div>
+          <div class="sidebar-section" id="sidebarContactSection" hidden>
+            <h4>Contacto</h4>
+            <ul class="sidebar-contact-list" id="sidebarContactList"></ul>
+          </div>
+        </div>
+      </aside>
+      </div>
 
       <section class="my-bookings">
         <button class="link-toggle" id="toggleMyBookings">Mis reservas &darr;</button>

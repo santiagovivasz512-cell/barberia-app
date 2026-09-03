@@ -46,8 +46,39 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; text-wrap: bala
 button { font-family: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 
-#app { max-width: 880px; margin: 0 auto; padding: 0 20px 64px; transition: max-width .15s ease; }
+#app { max-width: 1180px; margin: 0 auto; padding: 0 20px 64px; transition: max-width .15s ease; }
 #app.panel-mode { max-width: 1320px; }
+
+.booking-layout { display: flex; gap: 28px; align-items: flex-start; }
+.booking-layout .stepper-shell { flex: 1 1 auto; min-width: 0; max-width: 640px; }
+.booking-sidebar { display: none; flex: 0 0 300px; }
+
+@media (min-width: 900px) {
+  .booking-sidebar { display: block; }
+}
+
+.sidebar-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  position: sticky;
+  top: 20px;
+}
+.sidebar-card h3 { font-size: 1.2rem; }
+.sidebar-desc { color: var(--muted); font-size: 0.88rem; line-height: 1.5; margin: 10px 0 0; }
+.sidebar-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.sidebar-section h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
+.sidebar-hours-list, .sidebar-contact-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.sidebar-hours-list li { display: flex; justify-content: space-between; gap: 10px; font-size: 0.84rem; font-family: var(--font-mono); }
+.sidebar-hours-list li .dow { color: var(--muted); font-family: var(--font-body); }
+.sidebar-hours-list li.is-today .dow, .sidebar-hours-list li.is-today .hrs { color: var(--accent-strong); font-weight: 700; }
+.sidebar-contact-list li { font-size: 0.84rem; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.sidebar-contact-list a { color: var(--accent-strong); text-decoration: none; }
+.sidebar-contact-list a:hover { text-decoration: underline; }
 
 /* ---------------------------------------------------------------------
    Topbar
@@ -215,14 +246,24 @@ input, select, textarea { font: inherit; color: var(--ink); background: var(--bg
 .date-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 /* Slots */
-.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.slot-list-wrap { display: flex; flex-direction: column; gap: 18px; }
+.slot-group-title {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .slot-btn {
   font-family: var(--font-mono);
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: 8px;
   padding: 10px 6px;
-  font-size: 0.92rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 .slot-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .empty-note { grid-column: 1 / -1; color: var(--muted); font-size: 0.92rem; padding: 12px 0; }
